@@ -11,11 +11,13 @@ import { execSync } from "child_process";
 import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { postReply as xApiPostReply, loadCredentialsFromEnv } from "../shared/x-api-client.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const API = process.env.SINGULARITY_DB_URL || "https://your-api-gateway.execute-api.us-east-1.amazonaws.com/api/data";
 const INTERVAL_MS = parseInt(process.argv.find((_, i, a) => a[i - 1] === "--interval") || "45") * 1000;
 const ONCE = process.argv.includes("--once");
+const REPLY_MODE = process.env.REPLY_MODE || "openclaw";
 const COOLDOWN_MS = 60_000;
 const DONE_DIR = join(__dirname, "done");
 const PENDING_DIR = join(__dirname, "pending-replies");
@@ -71,11 +73,32 @@ async function markDone(queueKey) {
   }
 }
 
+async function replyViaXApi(item) {
+  const { tweetId, username, appUrl, request } = item;
+  const replyText = `@${username} built it. here's "${request}" live: ${appUrl} — built in ~45s by Circuit. no human touched the code. 🦀`;
+  console.log(`  🐦 [x-api] Replying to @${username} (tweet ${tweetId})`);
+
+  const creds = loadCredentialsFromEnv();
+  if (!creds) {
+    console.error("  ❌ X API credentials not configured. Set X_CONSUMER_KEY, X_CONSUMER_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET");
+    return false;
+  }
+
+  const result = await xApiPostReply(tweetId, replyText, creds);
+  if (result.ok) {
+    console.log(`  ✅ Reply posted: ${result.tweetId}`);
+    return true;
+  } else {
+    console.error(`  ❌ X API error: ${result.error}`);
+    return false;
+  }
+}
+
 async function replyViaCDP(item) {
   const { tweetId, username, appUrl, request } = item;
   const ownerUsername = process.env.OWNER_USERNAME || "your_x_username";
   const tweetUrl = `https://x.com/${ownerUsername}/status/${tweetId}`;
-  const replyText = `built it. here's "${request}" live: ${appUrl} — built in ~45s by Circuit. no human touched the code. 🦀`;
+  const replyText = `@${username} built it. here's "${request}" live: ${appUrl} — built in ~45s by Circuit. no human touched the code. 🦀`;
 
   console.log(`  🐦 Replying to @${username} → ${tweetUrl}`);
 
@@ -140,7 +163,7 @@ async function poll() {
         await new Promise(r => setTimeout(r, wait));
       }
 
-      const saved = await replyViaCDP(item);
+      const saved = REPLY_MODE === "x-api" ? await replyViaXApi(item) : await replyViaCDP(item);
       if (saved) {
         await markDone(item.queueKey);
         lastReplyAt = Date.now();
@@ -171,6 +194,7 @@ console.log(`🚀 Singularity Reply Poller`);
 console.log(`   API: ${API}`);
 console.log(`   Interval: ${INTERVAL_MS / 1000}s`);
 console.log(`   Mode: ${ONCE ? "once" : "continuous"}`);
+console.log(`   Reply mode: ${REPLY_MODE} ${REPLY_MODE === "x-api" ? "(X API v2 direct)" : "(OpenClaw browser)"}`);
 console.log(`   Pending dir: ${PENDING_DIR}\n`);
 
 if (ONCE) {

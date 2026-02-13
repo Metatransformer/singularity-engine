@@ -120,6 +120,47 @@ In `aws/tweet-watcher/index.mjs`:
 - `getUserBuildCount` — change rate limit (default: 2/hour)
 - `sanitize` — adjust input length limit (default: 500 chars)
 
+## Reply Modes
+
+The poller supports two modes for sending tweet replies. Set `REPLY_MODE` in `.env`.
+
+### OpenClaw (Default)
+
+```
+REPLY_MODE=openclaw
+```
+
+- **How it works:** Poller saves reply files to `pending-replies/`, OpenClaw heartbeat picks them up and uses browser automation to post replies
+- **Pros:** No X API write access needed, works with any X account
+- **Cons:** Slow (~60s per reply), requires OpenClaw running locally, not scalable
+
+### X API v2 (Recommended for production)
+
+```
+REPLY_MODE=x-api
+```
+
+- **How it works:** Poller posts replies directly via X API v2 with OAuth 1.0a
+- **Pros:** Fast (~1s per reply), scalable, reliable, no browser needed
+- **Cons:** Needs X developer app with read+write permissions
+
+**Setup:**
+
+1. Go to [developer.x.com](https://developer.x.com)
+2. Create a project and app (or use existing)
+3. Set app permissions to **Read and Write**
+4. Generate Access Token and Secret (with read+write scope)
+5. Add all 4 values to `.env`:
+   ```
+   X_CONSUMER_KEY=...
+   X_CONSUMER_SECRET=...
+   X_ACCESS_TOKEN=...
+   X_ACCESS_TOKEN_SECRET=...
+   ```
+6. Set `REPLY_MODE=x-api`
+
+**Rate limits:** Free tier = 500 posts/month. Basic ($200/mo) = 3,000 posts/month.
+
 ## Environment Variables
 
 | Variable | Used By | Description |
@@ -133,7 +174,12 @@ In `aws/tweet-watcher/index.mjs`:
 | `GITHUB_TOKEN` | Deployer | GitHub PAT with repo access |
 | `GITHUB_REPO` | Deployer | Target repo (e.g., `org/builds`) |
 | `GITHUB_PAGES_URL` | Deployer | Pages base URL |
-| `OPENCLAW_CDP_PORT` | Poller | CDP port for browser automation |
+| `REPLY_MODE` | Poller | `openclaw` (default) or `x-api` |
+| `X_CONSUMER_KEY` | Poller | OAuth 1.0a consumer key (x-api mode) |
+| `X_CONSUMER_SECRET` | Poller | OAuth 1.0a consumer secret (x-api mode) |
+| `X_ACCESS_TOKEN` | Poller | OAuth 1.0a access token (x-api mode) |
+| `X_ACCESS_TOKEN_SECRET` | Poller | OAuth 1.0a access token secret (x-api mode) |
+| `OPENCLAW_CDP_PORT` | Poller | CDP port for browser automation (openclaw mode) |
 
 ## Cost
 

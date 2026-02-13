@@ -46,8 +46,38 @@ async function main() {
   console.log("\n🗄️  SingularityDB");
   config.SINGULARITY_DB_URL = await ask("  API Gateway URL (set after deploy-aws.sh)");
 
-  console.log("\n🌐 OpenClaw (optional)");
+  console.log("\n📤 Reply Mode");
+  console.log("  openclaw = browser automation (default, no API write access needed)");
+  console.log("  x-api    = X API v2 direct posting (fast, scalable)");
+  config.REPLY_MODE = await ask("  Reply mode", "openclaw");
+
+  if (config.REPLY_MODE === "x-api") {
+    console.log("\n🔑 X API OAuth 1.0a (get these from developer.x.com)");
+    config.X_CONSUMER_KEY = await ask("  Consumer Key (API Key)");
+    config.X_CONSUMER_SECRET = await ask("  Consumer Secret (API Secret)");
+    config.X_ACCESS_TOKEN = await ask("  Access Token");
+    config.X_ACCESS_TOKEN_SECRET = await ask("  Access Token Secret");
+  }
+
+  console.log("\n🌐 OpenClaw (optional, used for openclaw reply mode)");
   config.OPENCLAW_CDP_PORT = await ask("  CDP port", "18800");
+
+  // Validate X API OAuth credentials
+  if (config.REPLY_MODE === "x-api" && config.X_CONSUMER_KEY) {
+    process.stdout.write("🔍 Validating X API OAuth credentials... ");
+    try {
+      const { validateCredentials } = await import("../shared/x-api-client.mjs");
+      const result = await validateCredentials({
+        consumerKey: config.X_CONSUMER_KEY,
+        consumerSecret: config.X_CONSUMER_SECRET,
+        accessToken: config.X_ACCESS_TOKEN,
+        accessTokenSecret: config.X_ACCESS_TOKEN_SECRET,
+      });
+      console.log(result.ok ? `✅ (@${result.username})` : `❌ (${result.error})`);
+    } catch (e) {
+      console.log(`❌ (${e.message})`);
+    }
+  }
 
   // Validate X token
   if (config.X_BEARER_TOKEN) {
