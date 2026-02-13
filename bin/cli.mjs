@@ -269,10 +269,7 @@ async function cmdConfig() {
     }
   }
 
-  // ═══ Step 2: API Keys (manual) ═══
-  console.log(`\n${c.bold}🔑 API Keys${c.reset} ${c.dim}(these can't be auto-detected)${c.reset}\n`);
-
-  // Anthropic
+  // ═══ Step 2: Reply Mode + API Keys ═══
   const PLACEHOLDERS = new Set([
     "your_x_bearer_token", "your_tweet_id", "your_x_username",
     "your_github_token", "your-org/singularity-builds",
@@ -284,10 +281,20 @@ async function cmdConfig() {
   ]);
   const isPlaceholder = (val) => !val || PLACEHOLDERS.has(val) || /^your[_-]/.test(val);
 
+  // Reply Mode (ask first — determines what else we need)
+  console.log(`\n${c.bold}📤 Reply Mode${c.reset}`);
+  console.log(`  ${c.dim}How should the bot reply to tweets?${c.reset}`);
+  console.log(`  1. openclaw — browser automation (zero X API creds needed)`);
+  console.log(`  2. x-api — X API v2 direct posting (fast, needs bearer + OAuth)`);
+  const modeChoice = await ask("Choice", config.REPLY_MODE === "x-api" ? "2" : "1");
+  config.REPLY_MODE = modeChoice === "2" ? "x-api" : "openclaw";
+
+  // Anthropic key (always needed)
+  console.log(`\n${c.bold}🔑 API Keys${c.reset} ${c.dim}(these can't be auto-detected)${c.reset}\n`);
+
   const existingAnthro = isPlaceholder(config.ANTHROPIC_API_KEY) ? "" : config.ANTHROPIC_API_KEY;
   config.ANTHROPIC_API_KEY = await ask("Anthropic API key", existingAnthro);
   if (config.ANTHROPIC_API_KEY) {
-    // Quick validation
     process.stdout.write(`  ${c.dim}Validating...${c.reset} `);
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -301,57 +308,43 @@ async function cmdConfig() {
     }
   }
 
-  // Reply Mode
-  console.log(`\n${c.bold}📤 Reply Mode${c.reset}`);
-  console.log(`  ${c.dim}How should the bot reply to tweets?${c.reset}`);
-  console.log(`  1. openclaw — browser automation (no X write access needed)`);
-  console.log(`  2. x-api — X API v2 direct posting (fast, needs OAuth)`);
-  const modeChoice = await ask("Choice", config.REPLY_MODE === "x-api" ? "2" : "1");
-  config.REPLY_MODE = modeChoice === "2" ? "x-api" : "openclaw";
+  // X API creds — only for x-api mode
+  if (config.REPLY_MODE === "x-api") {
+    console.log(`\n${c.bold}🐦 X API${c.reset}`);
+    const existingBearer = isPlaceholder(config.X_BEARER_TOKEN) ? "" : config.X_BEARER_TOKEN;
+    config.X_BEARER_TOKEN = await ask("Bearer token (for reading tweets)", existingBearer);
 
-  // X API Bearer token
-  console.log(`\n${c.bold}🐦 X API${c.reset}`);
-  const existingBearer = isPlaceholder(config.X_BEARER_TOKEN) ? "" : config.X_BEARER_TOKEN;
-  config.X_BEARER_TOKEN = await ask("Bearer token (for reading tweets)", existingBearer);
-
-  let detectedUsername = null;
-  if (config.X_BEARER_TOKEN) {
-    process.stdout.write(`  ${c.dim}Validating...${c.reset} `);
-    try {
-      // Try /2/users/me first (works with OAuth 2.0 user context tokens)
-      const meRes = await fetch("https://api.twitter.com/2/users/me", {
-        headers: { Authorization: `Bearer ${config.X_BEARER_TOKEN}` },
-      });
-      if (meRes.ok) {
-        const me = await meRes.json();
-        detectedUsername = me.data?.username;
-        console.log(`${c.green}✅ Validated — authenticated as @${detectedUsername}${c.reset}`);
-      } else {
-        // Fallback: just check the token works for reading
-        const searchRes = await fetch("https://api.twitter.com/2/tweets/search/recent?query=test&max_results=10", {
+    let detectedUsername = null;
+    if (config.X_BEARER_TOKEN) {
+      process.stdout.write(`  ${c.dim}Validating...${c.reset} `);
+      try {
+        const meRes = await fetch("https://api.twitter.com/2/users/me", {
           headers: { Authorization: `Bearer ${config.X_BEARER_TOKEN}` },
         });
-        if (searchRes.ok) {
-          console.log(`${c.green}✅ Validated (app-only token, no user context)${c.reset}`);
+        if (meRes.ok) {
+          const me = await meRes.json();
+          detectedUsername = me.data?.username;
+          console.log(`${c.green}✅ Validated — authenticated as @${detectedUsername}${c.reset}`);
         } else {
-          console.log(`${c.red}❌ (${searchRes.status})${c.reset}`);
+          const searchRes = await fetch("https://api.twitter.com/2/tweets/search/recent?query=test&max_results=10", {
+            headers: { Authorization: `Bearer ${config.X_BEARER_TOKEN}` },
+          });
+          console.log(searchRes.ok ? `${c.green}✅ Validated (app-only token)${c.reset}` : `${c.red}❌ (${searchRes.status})${c.reset}`);
         }
+      } catch (e) {
+        console.log(`${c.red}❌ (${e.message})${c.reset}`);
       }
-    } catch (e) {
-      console.log(`${c.red}❌ (${e.message})${c.reset}`);
     }
-  }
 
-  // Owner username
-  if (detectedUsername) {
-    config.OWNER_USERNAME = detectedUsername;
-  } else {
-    const existingOwner = isPlaceholder(config.OWNER_USERNAME) ? "" : config.OWNER_USERNAME;
-    config.OWNER_USERNAME = await ask("Your X username (without @)", existingOwner);
-  }
+    // Owner username
+    if (detectedUsername) {
+      config.OWNER_USERNAME = detectedUsername;
+    } else {
+      const existingOwner = isPlaceholder(config.OWNER_USERNAME) ? "" : config.OWNER_USERNAME;
+      config.OWNER_USERNAME = await ask("Your X username (without @)", existingOwner);
+    }
 
-  // X API OAuth (only if x-api mode)
-  if (config.REPLY_MODE === "x-api") {
+    // OAuth creds for posting
     console.log(`\n${c.bold}🔑 X API OAuth 1.0a${c.reset} ${c.dim}(developer.x.com — needed for posting)${c.reset}`);
     config.X_CONSUMER_KEY = await ask("Consumer Key", isPlaceholder(config.X_CONSUMER_KEY) ? "" : config.X_CONSUMER_KEY);
     config.X_CONSUMER_SECRET = await ask("Consumer Secret", isPlaceholder(config.X_CONSUMER_SECRET) ? "" : config.X_CONSUMER_SECRET);
@@ -373,11 +366,12 @@ async function cmdConfig() {
         console.log(`${c.red}❌ (${e.message})${c.reset}`);
       }
     }
-  }
-
-  // OpenClaw CDP port (only if openclaw mode, with sensible default)
-  if (config.REPLY_MODE === "openclaw") {
+  } else {
+    // openclaw mode — no X API creds needed, set sensible defaults
     config.OPENCLAW_CDP_PORT = config.OPENCLAW_CDP_PORT || "18800";
+    // Ask for owner username (needed for tweet watcher to identify own tweets)
+    const existingOwner = isPlaceholder(config.OWNER_USERNAME) ? "" : config.OWNER_USERNAME;
+    config.OWNER_USERNAME = await ask("\n  Your X username (without @, for tweet filtering)", existingOwner);
   }
 
   // ═══ Step 3: Auto-Configure GitHub ═══
@@ -432,8 +426,10 @@ async function cmdConfig() {
   console.log(`\n${c.green}✅ Configuration saved to .env${c.reset}`);
   console.log(`\n${c.bold}📋 Summary:${c.reset}`);
   console.log(`  Anthropic API ${isPlaceholder(config.ANTHROPIC_API_KEY) ? c.red + "❌" : c.green + "✅"}${c.reset}`);
-  console.log(`  X API (read)  ${isPlaceholder(config.X_BEARER_TOKEN) ? c.red + "❌" : c.green + "✅"}${c.reset}${config.OWNER_USERNAME ? ` (@${config.OWNER_USERNAME})` : ""}`);
-  console.log(`  Reply mode    ${config.REPLY_MODE}`);
+  if (config.REPLY_MODE === "x-api") {
+    console.log(`  X API (read)  ${isPlaceholder(config.X_BEARER_TOKEN) ? c.red + "❌" : c.green + "✅"}${c.reset}${config.OWNER_USERNAME ? ` (@${config.OWNER_USERNAME})` : ""}`);
+  }
+  console.log(`  Reply mode    ${config.REPLY_MODE}${config.REPLY_MODE === "openclaw" && config.OWNER_USERNAME ? ` (@${config.OWNER_USERNAME})` : ""}`);
   console.log(`  AWS           ${config.AWS_REGION}${awsAcct}`);
   console.log(`  GitHub        ${config.GITHUB_REPO}`);
   console.log(`  Pages URL     ${config.GITHUB_PAGES_URL}`);
@@ -987,7 +983,7 @@ async function cmdStatus() {
 
   // Warnings
   const warnings = [];
-  if (isPlaceholder(env.X_BEARER_TOKEN)) warnings.push("X Bearer Token not configured — tweet watching won't work");
+  if (env.REPLY_MODE === "x-api" && isPlaceholder(env.X_BEARER_TOKEN)) warnings.push("X Bearer Token not configured — tweet watching won't work");
   if (isPlaceholder(env.ANTHROPIC_API_KEY)) warnings.push("Anthropic API key not configured — code generation won't work");
   if (isPlaceholder(env.GITHUB_TOKEN)) warnings.push("GitHub token not configured — deployment won't work");
   if (isPlaceholder(env.SINGULARITY_DB_URL)) warnings.push("SingularityDB URL not configured — run deploy first");
