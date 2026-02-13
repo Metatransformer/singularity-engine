@@ -1,0 +1,6 @@
+node_modules/
+.env
+*.done
+pending-replies/
+done/
+.DS_Store
