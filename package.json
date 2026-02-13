@@ -1,0 +1,31 @@
+{
+  "name": "singularity-engine",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Autonomous tweet-to-app pipeline. Tweet a request → AI builds it → deploys live → replies with link.",
+  "bin": {
+    "singularityengine": "./bin/cli.mjs"
+  },
+  "scripts": {
+    "setup": "node bin/cli.mjs config",
+    "deploy": "node bin/cli.mjs deploy",
+    "start": "node bin/cli.mjs start",
+    "stop": "node bin/cli.mjs stop",
+    "status": "node bin/cli.mjs status"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-eventbridge": "^3.0.0",
+    "@aws-sdk/client-iam": "^3.0.0",
+    "@aws-sdk/client-lambda": "^3.0.0",
+    "@aws-sdk/client-sts": "^3.0.0",
+    "@aws-sdk/client-apigatewayv2": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0",
+    "dotenv": "^16.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Metatransformer/singularity-engine.git"
+  }
+}

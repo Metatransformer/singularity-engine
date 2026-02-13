@@ -1,0 +1,1058 @@
+#!/usr/bin/env node
+/**
+ * Singularity Engine CLI
+ * Usage: singularityengine <command> [options]
+ */
+
+import { createInterface } from "readline";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, createReadStream } from "fs";
+import { execSync, spawn } from "child_process";
+import { fileURLToPath } from "url";
+import { dirname, resolve, join } from "path";
+
+// ── ANSI colors ──────────────────────────────────────────────────────────────
+const c = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  cyan: "\x1b[36m",
+};
+const ok = (msg) => console.log(`${c.green}✅ ${msg}${c.reset}`);
+const warn = (msg) => console.log(`${c.yellow}⚠️  ${msg}${c.reset}`);
+const err = (msg) => console.log(`${c.red}❌ ${msg}${c.reset}`);
+const info = (msg) => console.log(`${c.cyan}ℹ️  ${msg}${c.reset}`);
+const step = (msg) => console.log(`${c.blue}${msg}${c.reset}`);
+
+// ── Resolve repo root ────────────────────────────────────────────────────────
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const REPO_ROOT = resolve(__dirname, "..");
+
+function ensureRepo() {
+  const pkgPath = join(REPO_ROOT, "package.json");
+  if (!existsSync(pkgPath)) {
+    err("Cannot find singularity-engine repo. Run from within the repo or reinstall.");
+    process.exit(1);
+  }
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    if (pkg.name !== "singularity-engine") {
+      err("This doesn't look like the singularity-engine repo.");
+      process.exit(1);
+    }
+  } catch {
+    err("Invalid package.json");
+    process.exit(1);
+  }
+}
+
+// ── .env helpers ─────────────────────────────────────────────────────────────
+function loadEnv() {
+  const envPath = join(REPO_ROOT, ".env");
+  const env = {};
+  if (existsSync(envPath)) {
+    const lines = readFileSync(envPath, "utf8").split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const idx = trimmed.indexOf("=");
+      if (idx > 0) {
+        env[trimmed.slice(0, idx)] = trimmed.slice(idx + 1);
+      }
+    }
+  }
+  return env;
+}
+
+function saveEnv(env) {
+  const envPath = join(REPO_ROOT, ".env");
+  const content = Object.entries(env)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("\n") + "\n";
+  writeFileSync(envPath, content);
+}
+
+// ── Interactive prompt helper ────────────────────────────────────────────────
+function createPrompt() {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q, def) =>
+    new Promise((resolve) => {
+      const prompt = def ? `  ${q} ${c.dim}[${def}]${c.reset}: ` : `  ${q}: `;
+      rl.question(prompt, (answer) => resolve(answer.trim() || def || ""));
+    });
+  const confirm = async (q, def = "N") => {
+    const answer = await ask(`${q} (y/N)`, def);
+    return answer.toLowerCase() === "y";
+  };
+  return { rl, ask, confirm };
+}
+
+// ── AWS helpers ──────────────────────────────────────────────────────────────
+function getAwsClients(env) {
+  // Lazy-load AWS SDK to avoid import errors if not installed yet
+  return {
+    async lambda() {
+      const { LambdaClient } = await import("@aws-sdk/client-lambda");
+      return new LambdaClient({ region: env.AWS_REGION || "us-east-1" });
+    },
+    async dynamodb() {
+      const { DynamoDBClient } = await import("@aws-sdk/client-dynamodb");
+      return new DynamoDBClient({ region: env.AWS_REGION || "us-east-1" });
+    },
+    async iam() {
+      const { IAMClient } = await import("@aws-sdk/client-iam");
+      return new IAMClient({ region: env.AWS_REGION || "us-east-1" });
+    },
+    async eventbridge() {
+      const { EventBridgeClient } = await import("@aws-sdk/client-eventbridge");
+      return new EventBridgeClient({ region: env.AWS_REGION || "us-east-1" });
+    },
+    async sts() {
+      const { STSClient } = await import("@aws-sdk/client-sts");
+      return new STSClient({ region: env.AWS_REGION || "us-east-1" });
+    },
+    async apigateway() {
+      const { ApiGatewayV2Client } = await import("@aws-sdk/client-apigatewayv2");
+      return new ApiGatewayV2Client({ region: env.AWS_REGION || "us-east-1" });
+    },
+  };
+}
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const ROLE_NAME = "singularity-engine-role";
+const CODE_RUNNER_FN = "singularity-code-runner";
+const DEPLOYER_FN = "singularity-deployer";
+const WATCHER_FN = "singularity-tweet-watcher";
+const DB_API_FN = "singularity-db-api";
+const EVENTBRIDGE_RULE = "singularity-tweet-poll";
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COMMANDS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── config ───────────────────────────────────────────────────────────────────
+async function cmdConfig() {
+  ensureRepo();
+  const { rl, ask, confirm } = createPrompt();
+
+  console.log(`\n${c.bold}🦀 Singularity Engine — Configuration${c.reset}\n`);
+
+  const existing = loadEnv();
+  if (Object.keys(existing).length > 0) {
+    const overwrite = await confirm("Existing .env found. Reconfigure?");
+    if (!overwrite) {
+      console.log("Aborted.");
+      rl.close();
+      return;
+    }
+  }
+
+  const config = { ...existing };
+
+  // X API
+  console.log(`\n${c.bold}📱 X (Twitter) API${c.reset}`);
+  config.X_BEARER_TOKEN = await ask("Bearer token", config.X_BEARER_TOKEN);
+  config.WATCHED_TWEET_ID = await ask("Tweet ID to watch for replies", config.WATCHED_TWEET_ID);
+  config.OWNER_USERNAME = await ask("Your X username (without @)", config.OWNER_USERNAME);
+
+  // AWS
+  console.log(`\n${c.bold}☁️  AWS${c.reset}`);
+  config.AWS_REGION = await ask("Region", config.AWS_REGION || "us-east-1");
+  config.TABLE_NAME = await ask("DynamoDB table name", config.TABLE_NAME || "singularity-db");
+
+  // GitHub
+  console.log(`\n${c.bold}🐙 GitHub${c.reset}`);
+  config.GITHUB_TOKEN = await ask("Personal access token (repo scope)", config.GITHUB_TOKEN);
+  config.GITHUB_REPO = await ask("Builds repo (org/name)", config.GITHUB_REPO || "Metatransformer/singularity-builds");
+  const defaultPagesUrl = `https://${config.GITHUB_REPO.split("/")[0]}.github.io/${config.GITHUB_REPO.split("/")[1]}`;
+  config.GITHUB_PAGES_URL = await ask("GitHub Pages URL", config.GITHUB_PAGES_URL || defaultPagesUrl);
+
+  // Fork detection
+  if (config.GITHUB_TOKEN && config.GITHUB_REPO) {
+    process.stdout.write(`\n${c.dim}  Checking if ${config.GITHUB_REPO} exists...${c.reset} `);
+    try {
+      const res = await fetch(`https://api.github.com/repos/${config.GITHUB_REPO}`, {
+        headers: { Authorization: `Bearer ${config.GITHUB_TOKEN}` },
+      });
+      if (res.ok) {
+        const repo = await res.json();
+        console.log(repo.fork ? `${c.green}✅ (fork)${c.reset}` : `${c.green}✅ (exists)${c.reset}`);
+      } else if (res.status === 404) {
+        console.log(`${c.yellow}not found${c.reset}`);
+        console.log(`\n  ${c.yellow}You need a builds repo for GitHub Pages deployment.`);
+        console.log(`  Fork https://github.com/Metatransformer/singularity-builds`);
+        console.log(`  Then update GITHUB_REPO to your fork (e.g., your-user/singularity-builds)${c.reset}`);
+      }
+    } catch {
+      console.log(`${c.dim}(couldn't check)${c.reset}`);
+    }
+  }
+
+  // Anthropic
+  console.log(`\n${c.bold}🤖 Anthropic${c.reset}`);
+  config.ANTHROPIC_API_KEY = await ask("API key", config.ANTHROPIC_API_KEY);
+
+  // SingularityDB
+  console.log(`\n${c.bold}🗄️  SingularityDB${c.reset}`);
+  config.SINGULARITY_DB_URL = await ask("API Gateway URL (set after deploy)", config.SINGULARITY_DB_URL);
+
+  // Reply Mode
+  console.log(`\n${c.bold}📤 Reply Mode${c.reset}`);
+  console.log(`  ${c.dim}openclaw = browser automation (no API write access needed)`);
+  console.log(`  x-api    = X API v2 direct posting (fast, scalable)${c.reset}`);
+  config.REPLY_MODE = await ask("Reply mode", config.REPLY_MODE || "openclaw");
+
+  if (config.REPLY_MODE === "x-api") {
+    console.log(`\n${c.bold}🔑 X API OAuth 1.0a${c.reset} ${c.dim}(developer.x.com)${c.reset}`);
+    config.X_CONSUMER_KEY = await ask("Consumer Key", config.X_CONSUMER_KEY);
+    config.X_CONSUMER_SECRET = await ask("Consumer Secret", config.X_CONSUMER_SECRET);
+    config.X_ACCESS_TOKEN = await ask("Access Token", config.X_ACCESS_TOKEN);
+    config.X_ACCESS_TOKEN_SECRET = await ask("Access Token Secret", config.X_ACCESS_TOKEN_SECRET);
+  }
+
+  // OpenClaw
+  console.log(`\n${c.bold}🌐 OpenClaw${c.reset} ${c.dim}(optional)${c.reset}`);
+  config.OPENCLAW_CDP_PORT = await ask("CDP port", config.OPENCLAW_CDP_PORT || "18800");
+
+  // ── Validate tokens ──
+  console.log();
+
+  // Validate X Bearer
+  if (config.X_BEARER_TOKEN) {
+    process.stdout.write(`${c.dim}  Validating X API token...${c.reset} `);
+    try {
+      const res = await fetch("https://api.twitter.com/2/tweets/search/recent?query=test&max_results=10", {
+        headers: { Authorization: `Bearer ${config.X_BEARER_TOKEN}` },
+      });
+      console.log(res.ok ? `${c.green}✅${c.reset}` : `${c.red}❌ (${res.status})${c.reset}`);
+    } catch (e) {
+      console.log(`${c.red}❌ (${e.message})${c.reset}`);
+    }
+  }
+
+  // Validate X OAuth
+  if (config.REPLY_MODE === "x-api" && config.X_CONSUMER_KEY) {
+    process.stdout.write(`${c.dim}  Validating X OAuth credentials...${c.reset} `);
+    try {
+      const { validateCredentials } = await import(join(REPO_ROOT, "shared/x-api-client.mjs"));
+      const result = await validateCredentials({
+        consumerKey: config.X_CONSUMER_KEY,
+        consumerSecret: config.X_CONSUMER_SECRET,
+        accessToken: config.X_ACCESS_TOKEN,
+        accessTokenSecret: config.X_ACCESS_TOKEN_SECRET,
+      });
+      console.log(result.ok ? `${c.green}✅ (@${result.username})${c.reset}` : `${c.red}❌ (${result.error})${c.reset}`);
+    } catch (e) {
+      console.log(`${c.red}❌ (${e.message})${c.reset}`);
+    }
+  }
+
+  // Validate GitHub
+  if (config.GITHUB_TOKEN) {
+    process.stdout.write(`${c.dim}  Validating GitHub token...${c.reset} `);
+    try {
+      const res = await fetch("https://api.github.com/user", {
+        headers: { Authorization: `Bearer ${config.GITHUB_TOKEN}` },
+      });
+      if (res.ok) {
+        const user = await res.json();
+        console.log(`${c.green}✅ (${user.login})${c.reset}`);
+      } else {
+        console.log(`${c.red}❌ (${res.status})${c.reset}`);
+      }
+    } catch (e) {
+      console.log(`${c.red}❌ (${e.message})${c.reset}`);
+    }
+  }
+
+  saveEnv(config);
+  ok(".env written!");
+
+  console.log(`\n${c.bold}Next steps:${c.reset}`);
+  console.log(`  ${c.cyan}singularityengine deploy${c.reset}   — Deploy to AWS`);
+  console.log(`  ${c.cyan}singularityengine status${c.reset}   — Check infrastructure`);
+  console.log(`  ${c.cyan}singularityengine start${c.reset}    — Enable tweet polling\n`);
+
+  rl.close();
+}
+
+// ── deploy ───────────────────────────────────────────────────────────────────
+async function cmdDeploy(args) {
+  ensureRepo();
+  const dryRun = args.includes("--dry-run");
+  const env = loadEnv();
+  const region = env.AWS_REGION || "us-east-1";
+  const tableName = env.TABLE_NAME || "singularity-db";
+
+  console.log(`\n${c.bold}🚀 Deploying Singularity Engine to AWS${c.reset}\n`);
+
+  // Get account ID
+  let accountId;
+  try {
+    const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
+    const sts = new STSClient({ region });
+    const identity = await sts.send(new GetCallerIdentityCommand({}));
+    accountId = identity.Account;
+    info(`Account: ${accountId}`);
+    info(`Region: ${region}`);
+    info(`Table: ${tableName}`);
+  } catch (e) {
+    err(`AWS credentials not configured: ${e.message}`);
+    console.log(`  Run ${c.cyan}aws configure${c.reset} first.`);
+    process.exit(1);
+  }
+
+  if (dryRun) warn("DRY RUN — no changes will be made\n");
+
+  const run = async (label, fn) => {
+    process.stdout.write(`${c.blue}  ⏳ ${label}...${c.reset} `);
+    if (dryRun) {
+      console.log(`${c.yellow}[dry-run]${c.reset}`);
+      return null;
+    }
+    try {
+      const result = await fn();
+      console.log(`${c.green}✅${c.reset}`);
+      return result;
+    } catch (e) {
+      if (e.name === "ResourceConflictException" || e.name === "EntityAlreadyExistsException" || e.name === "ResourceInUseException" || e.message?.includes("already exists")) {
+        console.log(`${c.yellow}(exists)${c.reset}`);
+        return "exists";
+      }
+      console.log(`${c.red}❌ ${e.message}${c.reset}`);
+      throw e;
+    }
+  };
+
+  // 1. DynamoDB Table
+  step("\n📦 DynamoDB");
+  try {
+    const { DynamoDBClient, CreateTableCommand, DescribeTableCommand } = await import("@aws-sdk/client-dynamodb");
+    const ddb = new DynamoDBClient({ region });
+    await run("Creating table", async () => {
+      try {
+        await ddb.send(new DescribeTableCommand({ TableName: tableName }));
+        return "exists";
+      } catch {
+        await ddb.send(new CreateTableCommand({
+          TableName: tableName,
+          KeySchema: [
+            { AttributeName: "pk", KeyType: "HASH" },
+            { AttributeName: "sk", KeyType: "RANGE" },
+          ],
+          AttributeDefinitions: [
+            { AttributeName: "pk", AttributeType: "S" },
+            { AttributeName: "sk", AttributeType: "S" },
+          ],
+          BillingMode: "PAY_PER_REQUEST",
+        }));
+      }
+    });
+  } catch (e) {
+    if (!dryRun) { err(e.message); process.exit(1); }
+  }
+
+  // 2. IAM Role
+  step("\n🔐 IAM Role");
+  let roleArn;
+  try {
+    const { IAMClient, CreateRoleCommand, GetRoleCommand, AttachRolePolicyCommand, PutRolePolicyCommand } = await import("@aws-sdk/client-iam");
+    const iam = new IAMClient({ region });
+
+    const trustPolicy = JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [{ Effect: "Allow", Principal: { Service: "lambda.amazonaws.com" }, Action: "sts:AssumeRole" }],
+    });
+
+    const result = await run("Creating IAM role", async () => {
+      try {
+        const r = await iam.send(new CreateRoleCommand({
+          RoleName: ROLE_NAME,
+          AssumeRolePolicyDocument: trustPolicy,
+        }));
+        return r.Role.Arn;
+      } catch (e) {
+        if (e.name === "EntityAlreadyExistsException") {
+          const r = await iam.send(new GetRoleCommand({ RoleName: ROLE_NAME }));
+          return r.Role.Arn;
+        }
+        throw e;
+      }
+    });
+
+    if (!dryRun) {
+      roleArn = typeof result === "string" && result.startsWith("arn:") ? result : `arn:aws:iam::${accountId}:role/${ROLE_NAME}`;
+      if (result === "exists") {
+        const r = await iam.send(new GetRoleCommand({ RoleName: ROLE_NAME }));
+        roleArn = r.Role.Arn;
+      }
+
+      await run("Attaching policies", async () => {
+        await iam.send(new AttachRolePolicyCommand({
+          RoleName: ROLE_NAME,
+          PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        }));
+        await iam.send(new PutRolePolicyCommand({
+          RoleName: ROLE_NAME,
+          PolicyName: "singularity-engine-policy",
+          PolicyDocument: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Action: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan"],
+                Resource: `arn:aws:dynamodb:${region}:${accountId}:table/${tableName}`,
+              },
+              {
+                Effect: "Allow",
+                Action: ["lambda:InvokeFunction"],
+                Resource: `arn:aws:lambda:${region}:${accountId}:function:singularity-*`,
+              },
+            ],
+          }),
+        }));
+      });
+
+      info("Waiting 10s for IAM propagation...");
+      await new Promise((r) => setTimeout(r, 10000));
+    } else {
+      roleArn = `arn:aws:iam::${accountId}:role/${ROLE_NAME}`;
+    }
+  } catch (e) {
+    if (!dryRun) { err(e.message); process.exit(1); }
+  }
+
+  // 3. Lambda Functions
+  step("\n📦 Lambda Functions");
+
+  const deployLambda = async (fnName, entryFile, includeShared, pkgDeps, envVars, timeout, memorySize) => {
+    const { LambdaClient, CreateFunctionCommand, UpdateFunctionCodeCommand, UpdateFunctionConfigurationCommand, GetFunctionCommand } = await import("@aws-sdk/client-lambda");
+    const lambda = new LambdaClient({ region });
+    const { execSync } = await import("child_process");
+    const { mkdtempSync, cpSync, rmSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const tmpDir = mkdtempSync(join(tmpdir(), "se-"));
+
+    try {
+      // Copy entry file
+      cpSync(join(REPO_ROOT, entryFile), join(tmpDir, "index.mjs"));
+
+      // Fix import paths
+      let code = readFileSync(join(tmpDir, "index.mjs"), "utf8");
+      code = code.replace(/\.\.\/\.\.\/shared\//g, "./shared/").replace(/\.\.\/shared\//g, "./shared/");
+      writeFileSync(join(tmpDir, "index.mjs"), code);
+
+      if (includeShared) {
+        mkdirSync(join(tmpDir, "shared"), { recursive: true });
+        const sharedDir = join(REPO_ROOT, "shared");
+        for (const f of ["prompts.mjs", "security.mjs", "x-api-client.mjs"]) {
+          if (existsSync(join(sharedDir, f))) {
+            cpSync(join(sharedDir, f), join(tmpDir, "shared", f));
+          }
+        }
+      }
+
+      if (pkgDeps) {
+        writeFileSync(join(tmpDir, "package.json"), JSON.stringify({
+          name: fnName, version: "1.0.0", type: "module", dependencies: pkgDeps,
+        }));
+        execSync("npm install --production 2>/dev/null", { cwd: tmpDir, stdio: "pipe" });
+      }
+
+      execSync("zip -r function.zip . > /dev/null", { cwd: tmpDir, stdio: "pipe" });
+      const zipFile = readFileSync(join(tmpDir, "function.zip"));
+
+      await run(`Deploying ${fnName}`, async () => {
+        try {
+          await lambda.send(new GetFunctionCommand({ FunctionName: fnName }));
+          // Exists — update
+          await lambda.send(new UpdateFunctionCodeCommand({
+            FunctionName: fnName,
+            ZipFile: zipFile,
+          }));
+          // Wait a moment for code update
+          await new Promise((r) => setTimeout(r, 2000));
+          await lambda.send(new UpdateFunctionConfigurationCommand({
+            FunctionName: fnName,
+            Environment: { Variables: envVars },
+            Timeout: timeout,
+            MemorySize: memorySize,
+          }));
+        } catch {
+          await lambda.send(new CreateFunctionCommand({
+            FunctionName: fnName,
+            Runtime: "nodejs20.x",
+            Handler: "index.handler",
+            Role: roleArn,
+            Code: { ZipFile: zipFile },
+            Environment: { Variables: envVars },
+            Timeout: timeout,
+            MemorySize: memorySize,
+          }));
+        }
+      });
+    } finally {
+      execSync(`rm -rf "${tmpDir}"`);
+    }
+  };
+
+  if (!dryRun) {
+    await deployLambda(CODE_RUNNER_FN, "aws/code-runner/index.mjs", true,
+      { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0" },
+      { TABLE_NAME: tableName, ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY || "", SINGULARITY_DB_URL: env.SINGULARITY_DB_URL || "" },
+      120, 512);
+
+    await deployLambda(DEPLOYER_FN, "aws/deployer/index.mjs", false,
+      { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0" },
+      { TABLE_NAME: tableName, GITHUB_REPO: env.GITHUB_REPO || "", GITHUB_TOKEN: env.GITHUB_TOKEN || "", GITHUB_PAGES_URL: env.GITHUB_PAGES_URL || "" },
+      30, 256);
+
+    await deployLambda(WATCHER_FN, "aws/tweet-watcher/index.mjs", true,
+      { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0", "@aws-sdk/client-lambda": "^3.0.0" },
+      { TABLE_NAME: tableName, CODE_RUNNER_FUNCTION: CODE_RUNNER_FN, DEPLOYER_FUNCTION: DEPLOYER_FN, X_BEARER_TOKEN: env.X_BEARER_TOKEN || "", WATCHED_TWEET_ID: env.WATCHED_TWEET_ID || "", OWNER_USERNAME: env.OWNER_USERNAME || "" },
+      300, 256);
+
+    await deployLambda(DB_API_FN, "aws/db-api/index.mjs", false,
+      { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0" },
+      { TABLE_NAME: tableName },
+      10, 256);
+  } else {
+    await run(`Deploying ${CODE_RUNNER_FN}`, async () => {});
+    await run(`Deploying ${DEPLOYER_FN}`, async () => {});
+    await run(`Deploying ${WATCHER_FN}`, async () => {});
+    await run(`Deploying ${DB_API_FN}`, async () => {});
+  }
+
+  // 4. EventBridge
+  step("\n⏰ EventBridge");
+  try {
+    const { EventBridgeClient, PutRuleCommand, PutTargetsCommand } = await import("@aws-sdk/client-eventbridge");
+    const { LambdaClient, AddPermissionCommand, GetFunctionCommand } = await import("@aws-sdk/client-lambda");
+
+    await run("Creating schedule rule (every 2 min)", async () => {
+      const eb = new EventBridgeClient({ region });
+      const ruleResult = await eb.send(new PutRuleCommand({
+        Name: EVENTBRIDGE_RULE,
+        ScheduleExpression: "rate(2 minutes)",
+        State: "ENABLED",
+      }));
+
+      const lambda = new LambdaClient({ region });
+      const fn = await lambda.send(new GetFunctionCommand({ FunctionName: WATCHER_FN }));
+      const watcherArn = fn.Configuration.FunctionArn;
+
+      await eb.send(new PutTargetsCommand({
+        Rule: EVENTBRIDGE_RULE,
+        Targets: [{ Id: "singularity-watcher", Arn: watcherArn }],
+      }));
+
+      try {
+        await lambda.send(new AddPermissionCommand({
+          FunctionName: WATCHER_FN,
+          StatementId: "eventbridge-invoke",
+          Action: "lambda:InvokeFunction",
+          Principal: "events.amazonaws.com",
+          SourceArn: ruleResult.RuleArn,
+        }));
+      } catch {} // Permission may already exist
+    });
+  } catch (e) {
+    if (!dryRun) { err(e.message); }
+  }
+
+  // 5. API Gateway (SingularityDB)
+  step("\n🌐 API Gateway");
+  try {
+    const { ApiGatewayV2Client, GetApisCommand, CreateApiCommand, CreateRouteCommand, CreateIntegrationCommand, CreateStageCommand, GetStagesCommand } = await import("@aws-sdk/client-apigatewayv2");
+    const apigw = new ApiGatewayV2Client({ region });
+
+    await run("Setting up API Gateway", async () => {
+      // Check if API already exists
+      const apis = await apigw.send(new GetApisCommand({}));
+      let api = apis.Items?.find((a) => a.Name === "singularity-db-api");
+
+      if (!api) {
+        const result = await apigw.send(new CreateApiCommand({
+          Name: "singularity-db-api",
+          ProtocolType: "HTTP",
+          CorsConfiguration: {
+            AllowOrigins: ["*"],
+            AllowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            AllowHeaders: ["*"],
+          },
+        }));
+        api = result;
+
+        // Create integration with db-api Lambda
+        const { LambdaClient, GetFunctionCommand, AddPermissionCommand: AddPermCmd } = await import("@aws-sdk/client-lambda");
+        const lambda = new LambdaClient({ region });
+        const fn = await lambda.send(new GetFunctionCommand({ FunctionName: DB_API_FN }));
+
+        // Grant API Gateway permission to invoke the Lambda
+        try {
+          await lambda.send(new AddPermCmd({
+            FunctionName: DB_API_FN,
+            StatementId: "apigateway-invoke",
+            Action: "lambda:InvokeFunction",
+            Principal: "apigateway.amazonaws.com",
+          }));
+        } catch {} // may already exist
+
+        const integration = await apigw.send(new CreateIntegrationCommand({
+          ApiId: api.ApiId,
+          IntegrationType: "AWS_PROXY",
+          IntegrationUri: fn.Configuration.FunctionArn,
+          PayloadFormatVersion: "2.0",
+        }));
+
+        await apigw.send(new CreateRouteCommand({
+          ApiId: api.ApiId,
+          RouteKey: "ANY /api/{proxy+}",
+          Target: `integrations/${integration.IntegrationId}`,
+        }));
+
+        // Create $default stage with auto-deploy
+        await apigw.send(new CreateStageCommand({
+          ApiId: api.ApiId,
+          StageName: "$default",
+          AutoDeploy: true,
+        }));
+      }
+
+      const apiUrl = api.ApiEndpoint || `https://${api.ApiId}.execute-api.${region}.amazonaws.com`;
+      info(`API Gateway URL: ${apiUrl}/api/data`);
+
+      // Update .env
+      const currentEnv = loadEnv();
+      currentEnv.SINGULARITY_DB_URL = `${apiUrl}/api/data`;
+      saveEnv(currentEnv);
+    });
+  } catch (e) {
+    if (!dryRun) warn(`API Gateway: ${e.message}`);
+  }
+
+  console.log(`\n${c.bold}${c.green}════════════════════════════════════════════${c.reset}`);
+  console.log(`${c.bold}${c.green}🎉 Singularity Engine deployed!${c.reset}`);
+  console.log(`${c.bold}${c.green}════════════════════════════════════════════${c.reset}\n`);
+
+  console.log(`${c.bold}Lambdas:${c.reset}`);
+  console.log(`  • ${WATCHER_FN} (polls X every 2 min)`);
+  console.log(`  • ${CODE_RUNNER_FN} (generates apps)`);
+  console.log(`  • ${DEPLOYER_FN} (pushes to GitHub Pages)`);
+  console.log(`  • ${DB_API_FN} (public builds API)\n`);
+
+  console.log(`${c.bold}Next:${c.reset}`);
+  console.log(`  ${c.cyan}singularityengine status${c.reset}  — Verify deployment`);
+  console.log(`  ${c.cyan}singularityengine start${c.reset}   — Ensure polling is active`);
+  console.log(`  Then tweet a build request! 🚀\n`);
+}
+
+// ── status ───────────────────────────────────────────────────────────────────
+async function cmdStatus() {
+  ensureRepo();
+  const env = loadEnv();
+  const region = env.AWS_REGION || "us-east-1";
+  const tableName = env.TABLE_NAME || "singularity-db";
+
+  console.log(`\n${c.bold}🦀 Singularity Engine — Status${c.reset}\n`);
+
+  // Config status
+  step("📋 Configuration");
+  const secrets = [
+    "X_BEARER_TOKEN", "WATCHED_TWEET_ID", "OWNER_USERNAME",
+    "AWS_REGION", "TABLE_NAME", "GITHUB_TOKEN", "GITHUB_REPO",
+    "GITHUB_PAGES_URL", "ANTHROPIC_API_KEY", "SINGULARITY_DB_URL", "REPLY_MODE",
+  ];
+  for (const key of secrets) {
+    const val = env[key];
+    const status = val ? `${c.green}✅${c.reset}` : `${c.red}❌${c.reset}`;
+    const preview = val ? `${c.dim}(${val.slice(0, 8)}...)${c.reset}` : `${c.dim}(not set)${c.reset}`;
+    console.log(`  ${status} ${key} ${preview}`);
+  }
+
+  // AWS infrastructure
+  step("\n☁️  AWS Infrastructure");
+  try {
+    // Lambda functions
+    const { LambdaClient, GetFunctionCommand } = await import("@aws-sdk/client-lambda");
+    const lambda = new LambdaClient({ region });
+    for (const fn of [WATCHER_FN, CODE_RUNNER_FN, DEPLOYER_FN, DB_API_FN]) {
+      try {
+        const result = await lambda.send(new GetFunctionCommand({ FunctionName: fn }));
+        console.log(`  ${c.green}✅${c.reset} Lambda: ${fn} ${c.dim}(${result.Configuration.Runtime}, ${result.Configuration.MemorySize}MB)${c.reset}`);
+      } catch {
+        console.log(`  ${c.red}❌${c.reset} Lambda: ${fn} ${c.dim}(not found)${c.reset}`);
+      }
+    }
+
+    // EventBridge
+    const { EventBridgeClient, DescribeRuleCommand } = await import("@aws-sdk/client-eventbridge");
+    const eb = new EventBridgeClient({ region });
+    try {
+      const rule = await eb.send(new DescribeRuleCommand({ Name: EVENTBRIDGE_RULE }));
+      const running = rule.State === "ENABLED";
+      console.log(`  ${running ? c.green + "✅" : c.yellow + "⏸️ "} ${c.reset} EventBridge: ${EVENTBRIDGE_RULE} ${c.dim}(${rule.State})${c.reset}`);
+      console.log(`\n${c.bold}🤖 Bot Status: ${running ? c.green + "RUNNING" : c.yellow + "STOPPED"}${c.reset}`);
+    } catch {
+      console.log(`  ${c.red}❌${c.reset} EventBridge: ${EVENTBRIDGE_RULE} ${c.dim}(not found)${c.reset}`);
+      console.log(`\n${c.bold}🤖 Bot Status: ${c.red}NOT DEPLOYED${c.reset}`);
+    }
+
+    // DynamoDB
+    const { DynamoDBClient, DescribeTableCommand, ScanCommand } = await import("@aws-sdk/client-dynamodb");
+    const ddb = new DynamoDBClient({ region });
+    try {
+      const table = await ddb.send(new DescribeTableCommand({ TableName: tableName }));
+      console.log(`\n  ${c.green}✅${c.reset} DynamoDB: ${tableName} ${c.dim}(${table.Table.ItemCount} items)${c.reset}`);
+
+      // Reply queue count
+      try {
+        const scan = await ddb.send(new ScanCommand({
+          TableName: tableName,
+          FilterExpression: "begins_with(pk, :ns)",
+          ExpressionAttributeValues: { ":ns": { S: "_reply_queue" } },
+          Select: "COUNT",
+        }));
+        console.log(`  ${c.cyan}📬${c.reset} Reply queue: ${scan.Count} pending`);
+      } catch {}
+
+      // Showcase count
+      try {
+        const scan = await ddb.send(new ScanCommand({
+          TableName: tableName,
+          FilterExpression: "begins_with(pk, :ns)",
+          ExpressionAttributeValues: { ":ns": { S: "_showcase" } },
+          Select: "COUNT",
+        }));
+        console.log(`  ${c.cyan}🏗️ ${c.reset} Deployed apps: ${scan.Count}`);
+      } catch {}
+    } catch {
+      console.log(`\n  ${c.red}❌${c.reset} DynamoDB: ${tableName} ${c.dim}(not found)${c.reset}`);
+    }
+  } catch (e) {
+    err(`AWS error: ${e.message}`);
+    console.log(`  ${c.dim}Make sure AWS credentials are configured.${c.reset}`);
+  }
+
+  // Warnings
+  const warnings = [];
+  if (!env.X_BEARER_TOKEN) warnings.push("X Bearer Token not set — tweet watching won't work");
+  if (!env.ANTHROPIC_API_KEY) warnings.push("Anthropic API key not set — code generation won't work");
+  if (!env.GITHUB_TOKEN) warnings.push("GitHub token not set — deployment won't work");
+  if (!env.SINGULARITY_DB_URL) warnings.push("SingularityDB URL not set — run deploy first");
+
+  if (warnings.length > 0) {
+    console.log(`\n${c.yellow}⚠️  Warnings:${c.reset}`);
+    for (const w of warnings) {
+      console.log(`  ${c.yellow}• ${w}${c.reset}`);
+    }
+  }
+  console.log();
+}
+
+// ── stop ─────────────────────────────────────────────────────────────────────
+async function cmdStop() {
+  ensureRepo();
+  const env = loadEnv();
+  const region = env.AWS_REGION || "us-east-1";
+
+  console.log(`\n${c.bold}⏹️  Stopping Singularity Engine...${c.reset}\n`);
+
+  try {
+    const { EventBridgeClient, DisableRuleCommand } = await import("@aws-sdk/client-eventbridge");
+    const eb = new EventBridgeClient({ region });
+    await eb.send(new DisableRuleCommand({ Name: EVENTBRIDGE_RULE }));
+    ok("EventBridge rule disabled. Tweet polling stopped.");
+    info("Infrastructure is still deployed. Use 'singularityengine start' to resume.");
+    info("Use 'singularityengine uninstall' to tear down everything.\n");
+  } catch (e) {
+    err(`Failed to stop: ${e.message}`);
+  }
+}
+
+// ── start ────────────────────────────────────────────────────────────────────
+async function cmdStart() {
+  ensureRepo();
+  const env = loadEnv();
+  const region = env.AWS_REGION || "us-east-1";
+
+  console.log(`\n${c.bold}▶️  Starting Singularity Engine...${c.reset}\n`);
+
+  try {
+    const { EventBridgeClient, EnableRuleCommand } = await import("@aws-sdk/client-eventbridge");
+    const eb = new EventBridgeClient({ region });
+    await eb.send(new EnableRuleCommand({ Name: EVENTBRIDGE_RULE }));
+    ok("EventBridge rule enabled. Tweet polling active!");
+    info("The bot will check for new tweets every 2 minutes.\n");
+  } catch (e) {
+    err(`Failed to start: ${e.message}`);
+    info("Have you deployed yet? Run 'singularityengine deploy' first.\n");
+  }
+}
+
+// ── uninstall ────────────────────────────────────────────────────────────────
+async function cmdUninstall() {
+  ensureRepo();
+  const { rl, ask, confirm } = createPrompt();
+  const env = loadEnv();
+  const region = env.AWS_REGION || "us-east-1";
+  const tableName = env.TABLE_NAME || "singularity-db";
+
+  console.log(`\n${c.bold}${c.red}🗑️  Singularity Engine — Full Teardown${c.reset}\n`);
+  warn("This will delete all AWS infrastructure.\n");
+
+  if (!(await confirm("Are you sure you want to continue?"))) {
+    console.log("Aborted.");
+    rl.close();
+    return;
+  }
+
+  // EventBridge
+  if (await confirm("Delete EventBridge rule?")) {
+    try {
+      const { EventBridgeClient, RemoveTargetsCommand, DeleteRuleCommand } = await import("@aws-sdk/client-eventbridge");
+      const eb = new EventBridgeClient({ region });
+      await eb.send(new RemoveTargetsCommand({ Rule: EVENTBRIDGE_RULE, Ids: ["singularity-watcher"] }));
+      await eb.send(new DeleteRuleCommand({ Name: EVENTBRIDGE_RULE }));
+      ok("EventBridge rule deleted");
+    } catch (e) {
+      warn(`EventBridge: ${e.message}`);
+    }
+  }
+
+  // Lambda functions
+  if (await confirm("Delete Lambda functions?")) {
+    const { LambdaClient, DeleteFunctionCommand } = await import("@aws-sdk/client-lambda");
+    const lambda = new LambdaClient({ region });
+    for (const fn of [WATCHER_FN, CODE_RUNNER_FN, DEPLOYER_FN, DB_API_FN]) {
+      try {
+        await lambda.send(new DeleteFunctionCommand({ FunctionName: fn }));
+        ok(`Deleted ${fn}`);
+      } catch (e) {
+        warn(`${fn}: ${e.message}`);
+      }
+    }
+  }
+
+  // API Gateway
+  if (await confirm("Delete API Gateway?")) {
+    try {
+      const { ApiGatewayV2Client, GetApisCommand, DeleteApiCommand } = await import("@aws-sdk/client-apigatewayv2");
+      const apigw = new ApiGatewayV2Client({ region });
+      const apis = await apigw.send(new GetApisCommand({}));
+      const api = apis.Items?.find((a) => a.Name === "singularity-db-api");
+      if (api) {
+        await apigw.send(new DeleteApiCommand({ ApiId: api.ApiId }));
+        ok("API Gateway deleted");
+      } else {
+        info("API Gateway not found (already deleted?)");
+      }
+    } catch (e) {
+      warn(`API Gateway: ${e.message}`);
+    }
+  }
+
+  // IAM Role
+  if (await confirm("Delete IAM role?")) {
+    try {
+      const { IAMClient, DeleteRolePolicyCommand, DetachRolePolicyCommand, DeleteRoleCommand } = await import("@aws-sdk/client-iam");
+      const iam = new IAMClient({ region });
+      try { await iam.send(new DeleteRolePolicyCommand({ RoleName: ROLE_NAME, PolicyName: "singularity-engine-policy" })); } catch {}
+      try { await iam.send(new DetachRolePolicyCommand({ RoleName: ROLE_NAME, PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole" })); } catch {}
+      await iam.send(new DeleteRoleCommand({ RoleName: ROLE_NAME }));
+      ok("IAM role deleted");
+    } catch (e) {
+      warn(`IAM: ${e.message}`);
+    }
+  }
+
+  // DynamoDB (optional, data loss warning)
+  console.log(`\n${c.red}${c.bold}⚠️  DynamoDB table contains your app data and build history.${c.reset}`);
+  if (await confirm("Delete DynamoDB table? (DATA LOSS!)")) {
+    try {
+      const { DynamoDBClient, DeleteTableCommand } = await import("@aws-sdk/client-dynamodb");
+      const ddb = new DynamoDBClient({ region });
+      await ddb.send(new DeleteTableCommand({ TableName: tableName }));
+      ok("DynamoDB table deleted");
+    } catch (e) {
+      warn(`DynamoDB: ${e.message}`);
+    }
+  }
+
+  // Remove symlink
+  if (await confirm("Remove /usr/local/bin/singularityengine symlink?")) {
+    try {
+      execSync("rm -f /usr/local/bin/singularityengine");
+      ok("Symlink removed");
+    } catch (e) {
+      warn(`Symlink: ${e.message}`);
+    }
+  }
+
+  console.log(`\n${c.green}Teardown complete.${c.reset}\n`);
+  rl.close();
+}
+
+// ── update ───────────────────────────────────────────────────────────────────
+async function cmdUpdate() {
+  ensureRepo();
+  console.log(`\n${c.bold}🔄 Updating Singularity Engine...${c.reset}\n`);
+
+  try {
+    step("📥 Pulling latest changes...");
+    execSync("git pull origin main", { cwd: REPO_ROOT, stdio: "inherit" });
+
+    step("\n📦 Installing dependencies...");
+    execSync("npm install", { cwd: REPO_ROOT, stdio: "inherit" });
+
+    // Re-link
+    step("\n🔗 Re-linking CLI...");
+    const cliPath = join(REPO_ROOT, "bin/cli.mjs");
+    execSync(`chmod +x "${cliPath}"`);
+    try {
+      execSync(`ln -sf "${cliPath}" /usr/local/bin/singularityengine`);
+      ok("Symlink updated");
+    } catch {
+      warn("Could not update symlink (try with sudo)");
+    }
+
+    // Show changelog if exists
+    const changelogPath = join(REPO_ROOT, "CHANGELOG.md");
+    if (existsSync(changelogPath)) {
+      const changelog = readFileSync(changelogPath, "utf8");
+      const recent = changelog.split("\n").slice(0, 20).join("\n");
+      console.log(`\n${c.bold}📝 Recent Changes:${c.reset}`);
+      console.log(`${c.dim}${recent}${c.reset}`);
+    }
+
+    ok("\nUpdate complete!\n");
+  } catch (e) {
+    err(`Update failed: ${e.message}`);
+  }
+}
+
+// ── api ──────────────────────────────────────────────────────────────────────
+function cmdApi() {
+  ensureRepo();
+  const env = loadEnv();
+  const apiUrl = env.SINGULARITY_DB_URL || "https://<your-api-id>.execute-api.<region>.amazonaws.com";
+  const baseUrl = apiUrl.replace(/\/api\/data\/?$/, "");
+
+  console.log(`
+${c.bold}🌐 Singularity Engine API${c.reset}
+
+Your API URL: ${c.cyan}${baseUrl}${c.reset}
+
+${c.bold}━━━ Public Builds API ━━━${c.reset}
+
+${c.green}GET${c.reset} ${baseUrl}/api/builds?page=1&per_page=10
+
+  Returns paginated list of deployed apps, sorted by coolness score.
+
+  ${c.bold}Response:${c.reset}
+  {
+    "builds": [
+      {
+        "id": "tetris-clone",
+        "name": "Tetris Clone",
+        "score": 92,
+        "query": "build me a tetris game",
+        "username": "vibecoderjoe",
+        "tweet_url": "https://x.com/vibecoderjoe/status/1234567890",
+        "build_url": "https://your-org.github.io/singularity-builds/apps/tetris-clone/"
+      }
+    ],
+    "total": 47,
+    "page": 1,
+    "per_page": 10
+  }
+
+${c.green}GET${c.reset} ${baseUrl}/api/builds/:id
+
+  Returns a single build by ID.
+
+${c.bold}━━━ Raw Key-Value API (SingularityDB) ━━━${c.reset}
+
+${c.green}GET${c.reset}  ${baseUrl}/api/data/:namespace/:key     — Read a value
+${c.yellow}POST${c.reset} ${baseUrl}/api/data/:namespace/:key     — Write a value (JSON body)
+${c.green}GET${c.reset}  ${baseUrl}/api/data/:namespace            — List all keys in namespace
+
+${c.bold}━━━ Embed on Your Website ━━━${c.reset}
+
+  ${c.dim}// Fetch and display your builds${c.reset}
+  const res = await fetch("${baseUrl}/api/builds?per_page=20");
+  const { builds } = await res.json();
+  builds.forEach(b => {
+    console.log(\`\${b.name} (score: \${b.score}) → \${b.build_url}\`);
+  });
+
+${c.bold}━━━ cURL Examples ━━━${c.reset}
+
+  ${c.dim}# List builds${c.reset}
+  curl "${baseUrl}/api/builds?page=1&per_page=10"
+
+  ${c.dim}# Get single build${c.reset}
+  curl "${baseUrl}/api/builds/tetris-clone"
+
+  ${c.dim}# Store custom data${c.reset}
+  curl -X POST "${baseUrl}/api/data/myapp/settings" \\
+    -H "Content-Type: application/json" \\
+    -d '{"theme": "dark", "lang": "en"}'
+`);
+}
+
+// ── help ─────────────────────────────────────────────────────────────────────
+function showHelp() {
+  console.log(`
+${c.bold}🦀 Singularity Engine${c.reset}
+${c.dim}Autonomous tweet-to-app pipeline${c.reset}
+
+${c.bold}Usage:${c.reset} singularityengine <command> [options]
+
+${c.bold}Commands:${c.reset}
+  ${c.cyan}config${c.reset}      Interactive setup — configure API keys, tokens, and settings
+  ${c.cyan}deploy${c.reset}      Deploy infrastructure to AWS (Lambda, DynamoDB, EventBridge)
+  ${c.cyan}status${c.reset}      Show infrastructure health, config, and bot status
+  ${c.cyan}start${c.reset}       Enable tweet polling (resume after stop)
+  ${c.cyan}stop${c.reset}        Disable tweet polling (kill switch, keeps infra)
+  ${c.cyan}api${c.reset}         Show API spec for embedding builds on your website
+  ${c.cyan}uninstall${c.reset}   Full teardown — delete all AWS resources
+  ${c.cyan}update${c.reset}      Self-update from git + reinstall deps
+
+${c.bold}Options:${c.reset}
+  ${c.cyan}--dry-run${c.reset}   Preview deploy without making changes
+  ${c.cyan}--help${c.reset}      Show this help message
+
+${c.bold}Quick Start:${c.reset}
+  ${c.dim}$ singularityengine config    # Set up API keys${c.reset}
+  ${c.dim}$ singularityengine deploy    # Deploy to AWS${c.reset}
+  ${c.dim}$ singularityengine status    # Verify everything works${c.reset}
+
+${c.bold}Docs:${c.reset} https://github.com/Metatransformer/singularity-engine
+`);
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────────
+const args = process.argv.slice(2);
+const command = args[0];
+
+switch (command) {
+  case "config": await cmdConfig(); break;
+  case "deploy": await cmdDeploy(args.slice(1)); break;
+  case "status": await cmdStatus(); break;
+  case "stop": await cmdStop(); break;
+  case "start": await cmdStart(); break;
+  case "api": cmdApi(); break;
+  case "uninstall": await cmdUninstall(); break;
+  case "update": await cmdUpdate(); break;
+  case "--help": case "-h": case "help": showHelp(); break;
+  default:
+    if (command) err(`Unknown command: ${command}`);
+    showHelp();
+    break;
+}
