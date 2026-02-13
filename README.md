@@ -2,7 +2,25 @@
 
 **Autonomous tweet-to-app pipeline.** Tweet a request → AI builds it → deploys live → replies with link.
 
-> "build me a todo app" → 45 seconds later → live app + reply
+> "SingularityEngine build me a todo app" → 45 seconds later → live app + reply
+
+## How People Use It
+
+There are two ways to trigger a build:
+
+1. **Reply to your thread** — You post a thread on X, and people reply with:
+   ```
+   SingularityEngine build me a tetris game
+   ```
+
+2. **@mention you directly** — Anyone tweets:
+   ```
+   @yourusername SingularityEngine make a pomodoro timer
+   ```
+
+The keyword `SingularityEngine` (case-insensitive) is **required**. Without it, the bot ignores the tweet. Each user is rate-limited to 2 builds per hour.
+
+All replies include a link back to this repo so people can deploy their own.
 
 ## Install
 

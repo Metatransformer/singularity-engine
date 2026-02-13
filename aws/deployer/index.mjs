@@ -72,7 +72,10 @@ async function queueReply(tweetId, username, appUrl, request) {
     Item: {
       ns: "_reply_queue",
       key: `${Date.now()}-${tweetId}`,
-      value: { tweetId, username, appUrl, request },
+      value: {
+        tweetId, username, appUrl, request,
+        replyText: `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by SingularityEngine 🦀\nhttps://github.com/Metatransformer/singularity-engine`,
+      },
       updatedAt: new Date().toISOString(),
       status: "pending",
     },
@@ -132,19 +135,20 @@ export async function handler(event) {
     }));
 
     // Write to _showcase for public gallery (rate coolness based on complexity + fun)
-    const coolness = rateCoolness(request, html.length);
-    const title = request.length > 50 ? request.slice(0, 47) + "..." : request;
+    const score = rateCoolness(request, html.length);
+    const name = request.length > 50 ? request.slice(0, 47) + "..." : request;
     await ddb.send(new PutCommand({
       TableName: TABLE,
       Item: {
         ns: "_showcase",
         key: appId,
         value: {
-          title,
-          description: request,
-          url: appUrl,
-          coolness,
+          name,
+          score,
+          query: request,
           username,
+          tweet_url: tweetId ? `https://x.com/${username}/status/${tweetId}` : "",
+          build_url: appUrl,
           builtAt: now,
           htmlSize: html.length,
         },

@@ -107,50 +107,80 @@ async function getUserBuildCount(username) {
   return recent.length;
 }
 
+// --- Trigger detection ---
+// Two valid triggers:
+// 1. Reply to a registered thread containing "singularityengine <request>"
+// 2. @mention of owner containing "singularityengine <request>"
+const TRIGGER_RE = /singularityengine\s+(.+)/i;
+
+function extractBuildRequest(text, tweetMeta) {
+  const match = text.match(TRIGGER_RE);
+  if (!match) return null;
+  return match[1].replace(/^(build\s+me\s+|make\s+me\s+|create\s+|build\s+)/i, "").trim();
+}
+
 // --- X API ---
 async function fetchReplies(sinceId) {
-  if (!WATCHED_TWEET_ID) {
-    console.log("No WATCHED_TWEET_ID set");
-    return [];
+  // Strategy: search for tweets mentioning "singularityengine" that either:
+  // - Are in a registered thread (conversation_id matches WATCHED_TWEET_ID)
+  // - Or @mention the owner
+  const queries = [];
+
+  if (WATCHED_TWEET_ID) {
+    // Replies to the registered thread
+    queries.push(`conversation_id:${WATCHED_TWEET_ID} "singularityengine" -is:retweet`);
   }
 
-  // Only get direct replies to the watched tweet (not replies to replies)
-  const query = `conversation_id:${WATCHED_TWEET_ID} in_reply_to_tweet_id:${WATCHED_TWEET_ID} -is:retweet`;
-  const params = new URLSearchParams({
-    query,
-    max_results: "20",
-    "tweet.fields": "author_id,created_at,in_reply_to_user_id",
-    "expansions": "author_id",
-    "user.fields": "username",
-  });
-  if (sinceId !== "0") params.set("since_id", sinceId);
+  // Direct @mentions with the keyword
+  queries.push(`@${OWNER_USERNAME} "singularityengine" -is:retweet`);
 
-  const url = `https://api.twitter.com/2/tweets/search/recent?${params}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${X_BEARER_TOKEN}` },
-  });
+  const allTweets = [];
+  const seenIds = new Set();
 
-  if (!res.ok) {
-    const text = await res.text();
-    console.error(`X API error ${res.status}:`, text);
-    return [];
+  for (const query of queries) {
+    const params = new URLSearchParams({
+      query,
+      max_results: "20",
+      "tweet.fields": "author_id,created_at,in_reply_to_user_id,conversation_id",
+      "expansions": "author_id",
+      "user.fields": "username",
+    });
+    if (sinceId !== "0") params.set("since_id", sinceId);
+
+    const url = `https://api.twitter.com/2/tweets/search/recent?${params}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${X_BEARER_TOKEN}` },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`X API error ${res.status}:`, text);
+      continue;
+    }
+
+    const data = await res.json();
+    if (!data.data) continue;
+
+    const users = {};
+    for (const user of data.includes?.users || []) {
+      users[user.id] = user.username;
+    }
+
+    for (const tweet of data.data) {
+      if (seenIds.has(tweet.id)) continue;
+      seenIds.add(tweet.id);
+      allTweets.push({
+        id: tweet.id,
+        text: tweet.text,
+        authorId: tweet.author_id,
+        username: users[tweet.author_id] || "unknown",
+        createdAt: tweet.created_at,
+        conversationId: tweet.conversation_id,
+      });
+    }
   }
 
-  const data = await res.json();
-  if (!data.data) return [];
-
-  const users = {};
-  for (const user of data.includes?.users || []) {
-    users[user.id] = user.username;
-  }
-
-  return data.data.map(tweet => ({
-    id: tweet.id,
-    text: tweet.text,
-    authorId: tweet.author_id,
-    username: users[tweet.author_id] || "unknown",
-    createdAt: tweet.created_at,
-  }));
+  return allTweets;
 }
 
 function slugify(text) {
@@ -206,11 +236,12 @@ export async function handler() {
       continue;
     }
 
-    // Clean up tweet text — remove @mentions, "build me" prefixes
-    const rawText = reply.text.replace(/^(@\w+\s*)+/, "").trim();
-    const buildRequest = rawText
-      .replace(/^(build\s+me\s+|make\s+me\s+|create\s+|build\s+|i\s+want\s+|can\s+you\s+(build|make)\s+)/i, "")
-      .trim();
+    // Must contain "singularityengine <request>" keyword
+    const buildRequest = extractBuildRequest(reply.text, reply);
+    if (!buildRequest) {
+      console.log(`⏭️ No "singularityengine" keyword from @${reply.username}: "${reply.text.slice(0, 60)}"`);
+      continue;
+    }
 
     // Sanitize
     const check = sanitize(buildRequest);
