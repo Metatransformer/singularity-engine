@@ -18,57 +18,8 @@ const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
 const WATCHED_TWEET_ID = process.env.WATCHED_TWEET_ID;
 const OWNER_USERNAME = process.env.OWNER_USERNAME || "your_x_username"; // Skip self-replies
 
-// --- Injection detection ---
-const INJECTION_PATTERNS = [
-  /ignore\s+(previous|above|all|prior)\s+(instructions|prompts|rules)/i,
-  /system\s*prompt/i,
-  /you\s+are\s+(now|a)\s/i,
-  /pretend\s+(you|to\s+be)/i,
-  /act\s+as\s+(if|a|an)/i,
-  /\bsudo\b/i,
-  /\brm\s+-rf\b/i,
-  /process\.env/i,
-  /require\s*\(\s*['"](fs|child_process|os|net)/i,
-  /credentials/i,
-  /api[_\s]*key/i,
-  /secret[_\s]*key/i,
-  /password/i,
-  /eval\s*\(/i,
-  /exec\s*\(/i,
-  /\bmalware\b/i,
-  /\bphishing\b/i,
-  /\bransomware\b/i,
-  /\bkeylogger\b/i,
-  /\bcrypto\s*miner\b/i,
-  /steal|exfiltrate|scrape\s+user/i,
-];
-
-const BLOCKED_REQUESTS = [
-  /porn/i, /nsfw/i, /nude/i, /xxx/i, /sex/i,
-  /weapon/i, /bomb/i, /drug/i, /hack\s*(er|ing)/i,
-  /ddos/i, /exploit/i, /vulnerability\s*scanner/i,
-  /fake\s*(login|bank|paypal|amazon)/i,
-  /credit\s*card\s*(skimmer|stealer)/i,
-];
-
-function sanitize(text) {
-  if (!text || text.length > 500) return { safe: false, reason: "too long or empty" };
-  
-  for (const p of INJECTION_PATTERNS) {
-    if (p.test(text)) return { safe: false, reason: "injection detected" };
-  }
-  for (const p of BLOCKED_REQUESTS) {
-    if (p.test(text)) return { safe: false, reason: "blocked content" };
-  }
-
-  const cleaned = text
-    .replace(/<[^>]*>/g, "")
-    .replace(/[^\w\s.,!?'"():;\-+=#@/&%$*~\[\]{}|\\]/g, "")
-    .trim();
-
-  if (cleaned.length < 3) return { safe: false, reason: "too short" };
-  return { safe: true, cleaned };
-}
+// --- Security (shared module) ---
+import { sanitizeBuildRequest, getRejectionReply } from "./shared/security.mjs";
 
 // --- State management ---
 async function getLastProcessedId() {
@@ -243,10 +194,37 @@ export async function handler() {
       continue;
     }
 
-    // Sanitize
-    const check = sanitize(buildRequest);
+    // Sanitize (uses vard + custom patterns)
+    const check = sanitizeBuildRequest(buildRequest);
     if (!check.safe) {
       console.log(`❌ Rejected @${reply.username}: ${check.reason} — "${buildRequest.slice(0, 50)}"`);
+      
+      // Queue a rejection reply so the user knows why
+      const rejectionText = getRejectionReply(reply.username, check.category);
+      if (rejectionText) {
+        await ddb.send(new PutCommand({
+          TableName: TABLE,
+          Item: {
+            ns: "_reply_queue",
+            key: `${Date.now()}-${reply.id}`,
+            value: { tweetId: reply.id, username: reply.username, replyText: rejectionText },
+            updatedAt: new Date().toISOString(),
+            status: "pending",
+          },
+        }));
+        console.log(`📬 Rejection reply queued for @${reply.username}`);
+      }
+
+      // Log to abuse table for monitoring
+      await ddb.send(new PutCommand({
+        TableName: TABLE,
+        Item: {
+          ns: "_rejected",
+          key: `${reply.id}`,
+          value: { username: reply.username, request: buildRequest.slice(0, 200), reason: check.reason, category: check.category },
+          updatedAt: new Date().toISOString(),
+        },
+      }));
       continue;
     }
 

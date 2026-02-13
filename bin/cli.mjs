@@ -502,8 +502,8 @@ async function cmdDeploy(args) {
   };
 
   if (!dryRun) {
-    await deployLambda(CODE_RUNNER_FN, "aws/code-runner/index.mjs", true,
-      { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0" },
+    await deployLambda(CODE_RUNNER_FN, "aws/code-runner/run.mjs", true,
+      { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0", "@andersmyrmel/vard": "^1.0.0", "@anthropic-ai/sdk": "^0.39.0" },
       { TABLE_NAME: tableName, ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY || "", SINGULARITY_DB_URL: env.SINGULARITY_DB_URL || "" },
       120, 512);
 
@@ -513,7 +513,7 @@ async function cmdDeploy(args) {
       30, 256);
 
     await deployLambda(WATCHER_FN, "aws/tweet-watcher/index.mjs", true,
-      { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0", "@aws-sdk/client-lambda": "^3.0.0" },
+      { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0", "@aws-sdk/client-lambda": "^3.0.0", "@andersmyrmel/vard": "^1.0.0" },
       { TABLE_NAME: tableName, CODE_RUNNER_FUNCTION: CODE_RUNNER_FN, DEPLOYER_FUNCTION: DEPLOYER_FN, X_BEARER_TOKEN: env.X_BEARER_TOKEN || "", WATCHED_TWEET_ID: env.WATCHED_TWEET_ID || "", OWNER_USERNAME: env.OWNER_USERNAME || "" },
       300, 256);
 
@@ -663,6 +663,18 @@ async function cmdStatus() {
 
   // Config status
   step("📋 Configuration");
+  // Placeholder values from .env.example that indicate unconfigured
+  const PLACEHOLDERS = new Set([
+    "your_x_bearer_token", "your_tweet_id", "your_x_username",
+    "your_github_token", "your-org/singularity-builds",
+    "https://your-org.github.io/singularity-builds",
+    "your_anthropic_api_key",
+    "https://your-api-gateway.execute-api.us-east-1.amazonaws.com/api/data",
+    "your_consumer_key", "your_consumer_secret",
+    "your_access_token", "your_access_token_secret",
+  ]);
+  const isPlaceholder = (val) => !val || PLACEHOLDERS.has(val) || /^your[_-]/.test(val);
+
   const secrets = [
     "X_BEARER_TOKEN", "WATCHED_TWEET_ID", "OWNER_USERNAME",
     "AWS_REGION", "TABLE_NAME", "GITHUB_TOKEN", "GITHUB_REPO",
@@ -670,8 +682,9 @@ async function cmdStatus() {
   ];
   for (const key of secrets) {
     const val = env[key];
-    const status = val ? `${c.green}✅${c.reset}` : `${c.red}❌${c.reset}`;
-    const preview = val ? `${c.dim}(${val.slice(0, 8)}...)${c.reset}` : `${c.dim}(not set)${c.reset}`;
+    const placeholder = isPlaceholder(val);
+    const status = placeholder ? `${c.red}❌${c.reset}` : `${c.green}✅${c.reset}`;
+    const preview = placeholder ? `${c.dim}(not configured)${c.reset}` : `${c.dim}(${val.slice(0, 8)}...)${c.reset}`;
     console.log(`  ${status} ${key} ${preview}`);
   }
 
@@ -741,10 +754,10 @@ async function cmdStatus() {
 
   // Warnings
   const warnings = [];
-  if (!env.X_BEARER_TOKEN) warnings.push("X Bearer Token not set — tweet watching won't work");
-  if (!env.ANTHROPIC_API_KEY) warnings.push("Anthropic API key not set — code generation won't work");
-  if (!env.GITHUB_TOKEN) warnings.push("GitHub token not set — deployment won't work");
-  if (!env.SINGULARITY_DB_URL) warnings.push("SingularityDB URL not set — run deploy first");
+  if (isPlaceholder(env.X_BEARER_TOKEN)) warnings.push("X Bearer Token not configured — tweet watching won't work");
+  if (isPlaceholder(env.ANTHROPIC_API_KEY)) warnings.push("Anthropic API key not configured — code generation won't work");
+  if (isPlaceholder(env.GITHUB_TOKEN)) warnings.push("GitHub token not configured — deployment won't work");
+  if (isPlaceholder(env.SINGULARITY_DB_URL)) warnings.push("SingularityDB URL not configured — run deploy first");
 
   if (warnings.length > 0) {
     console.log(`\n${c.yellow}⚠️  Warnings:${c.reset}`);
