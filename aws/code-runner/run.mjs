@@ -37,16 +37,31 @@ async function generateApp(request, appId) {
   const htmlMatch = html.match(/(<!DOCTYPE html>[\s\S]*<\/html>)/i) || 
                     html.match(/(<html[\s\S]*<\/html>)/i);
   
-  const cleanHtml = htmlMatch ? htmlMatch[1] : html;
+  let cleanHtml = htmlMatch ? htmlMatch[1] : html;
+
+  // Inject Content-Security-Policy meta tag to restrict runtime behavior
+  // Only allow fetch to our API Gateway, block all other external connections
+  const dbUrl = process.env.SINGULARITY_DB_URL || "";
+  const dbOrigin = dbUrl ? new URL(dbUrl).origin : "https://*.execute-api.*.amazonaws.com";
+  const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src ${dbOrigin}; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">`;
+  
+  // Insert CSP after <head> tag
+  if (cleanHtml.includes("<head>")) {
+    cleanHtml = cleanHtml.replace("<head>", `<head>\n${cspTag}`);
+  } else if (cleanHtml.includes("<html>")) {
+    cleanHtml = cleanHtml.replace("<html>", `<html><head>${cspTag}</head>`);
+  }
 
   // Security scan
   const scan = scanGeneratedCode(cleanHtml);
   if (!scan.safe) {
     console.warn(`⚠️ Security violations detected:`, scan.violations);
-    // For now, log but allow (some violations like fetch are expected for singularity-db)
-    const critical = scan.violations.filter(v => 
-      !v.includes("fetch") && !v.includes("innerHTML")
-    );
+    // Allow expected patterns from SingularityDB usage, block everything else
+    const allowedViolations = [
+      "fetch() call — needs allowlist check",  // SingularityDB uses fetch
+      "innerHTML assignment (XSS risk)",         // Common in UI code (low risk for static HTML)
+    ];
+    const critical = scan.violations.filter(v => !allowedViolations.includes(v));
     if (critical.length > 0) {
       throw new Error(`Critical security violations: ${critical.join(", ")}`);
     }

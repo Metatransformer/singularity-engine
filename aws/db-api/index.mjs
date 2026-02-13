@@ -16,6 +16,9 @@ import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanComma
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = process.env.TABLE_NAME || "singularity-db";
 
+// System namespaces that cannot be written to via the public API
+const PROTECTED_NAMESPACES = new Set(["_system", "_builds", "_reply_queue", "_showcase"]);
+
 function cors(body, status = 200) {
   return {
     statusCode: status,
@@ -133,8 +136,22 @@ export async function handler(event) {
     // POST/PUT /api/data/:namespace/:key
     const dataPostMatch = path.match(/^\/api\/data\/([^/]+)\/([^/]+)\/?$/);
     if ((method === "POST" || method === "PUT") && dataPostMatch) {
+      const ns = decodeURIComponent(dataPostMatch[1]);
+      // Block writes to system namespaces
+      if (PROTECTED_NAMESPACES.has(ns)) {
+        return cors({ error: "Cannot write to protected namespace" }, 403);
+      }
+      // Block namespace names starting with _ (reserved for system)
+      if (ns.startsWith("_")) {
+        return cors({ error: "Namespaces starting with _ are reserved" }, 403);
+      }
       const body = typeof event.body === "string" ? JSON.parse(event.body) : event.body;
-      await putData(decodeURIComponent(dataPostMatch[1]), decodeURIComponent(dataPostMatch[2]), body);
+      // Limit value size to prevent abuse (100KB max)
+      const bodyStr = JSON.stringify(body);
+      if (bodyStr.length > 102400) {
+        return cors({ error: "Value too large (max 100KB)" }, 413);
+      }
+      await putData(ns, decodeURIComponent(dataPostMatch[2]), body);
       return cors({ ok: true });
     }
 

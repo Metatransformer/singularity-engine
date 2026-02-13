@@ -111,9 +111,81 @@ singularityengine status
 # 5. Tweet a build request!
 ```
 
-### GitHub Pages Setup
+## Detailed Setup
 
-You need a public repo for deploying built apps. Fork `Metatransformer/singularity-builds` and enable GitHub Pages on the `main` branch. The `config` command will guide you through this.
+### AWS Setup
+
+1. **Create an AWS account** at [aws.amazon.com](https://aws.amazon.com) if you don't have one
+2. **Install the AWS CLI** and configure credentials:
+   ```bash
+   aws configure
+   # Enter: Access Key ID, Secret Access Key, Region (us-east-1), Output (json)
+   ```
+3. **IAM permissions needed:** Lambda full access, DynamoDB, EventBridge, API Gateway, IAM role management, STS, CloudWatch Logs. Use `AdministratorAccess` for simplicity, or see [docs/SETUP.md](docs/SETUP.md) for a minimal policy.
+4. **Recommended region:** `us-east-1`
+
+### X (Twitter) API Setup
+
+1. Sign up at [developer.x.com](https://developer.x.com) (Free tier works for reading)
+2. Create a **Project** → **App**
+3. Copy the **Bearer Token** from Keys and Tokens
+4. *(For `x-api` reply mode only)* Enable Read+Write permissions, then generate **Access Token and Secret**
+
+### GitHub Setup
+
+1. **Fork** [Metatransformer/singularity-builds](https://github.com/Metatransformer/singularity-builds) (or create a new empty repo)
+2. **Enable GitHub Pages:** Repo → Settings → Pages → Deploy from branch `main` / root
+3. **Create a PAT:** [github.com/settings/tokens](https://github.com/settings/tokens) → Generate new token (classic) → scope: `repo`
+
+### Anthropic API Setup
+
+1. Get an API key at [console.anthropic.com](https://console.anthropic.com)
+2. Add billing (~$0.05-0.10 per build)
+
+### What `singularityengine config` Asks
+
+| Section | Prompt | What to Enter |
+|---------|--------|--------------|
+| **X API** | Bearer token | Your X API Bearer Token |
+| | Tweet ID to watch | Numeric tweet ID from the URL of the tweet to monitor |
+| | Your X username | Handle without @ |
+| **AWS** | Region | `us-east-1` (default) |
+| | DynamoDB table name | `singularity-db` (default) |
+| **GitHub** | Personal access token | Your PAT with `repo` scope |
+| | Builds repo | `org/repo-name` format |
+| | GitHub Pages URL | Auto-calculated |
+| **Anthropic** | API key | Starts with `sk-ant-...` |
+| **SingularityDB** | API Gateway URL | Leave blank (set by `deploy`) |
+| **Reply Mode** | Mode | `openclaw` or `x-api` |
+
+The CLI validates all tokens after entry.
+
+### What `singularityengine deploy` Creates
+
+| Resource | Name | Purpose |
+|----------|------|---------|
+| DynamoDB Table | `singularity-db` | Stores builds, replies, app data |
+| IAM Role | `singularity-engine-role` | Lambda execution permissions |
+| Lambda | `singularity-tweet-watcher` | Polls X every 2 min |
+| Lambda | `singularity-code-runner` | Claude generates apps |
+| Lambda | `singularity-deployer` | Pushes to GitHub Pages |
+| Lambda | `singularity-db-api` | Public REST API |
+| EventBridge | `singularity-tweet-poll` | Triggers watcher every 2 min |
+| API Gateway | `singularity-db-api` | HTTP API for SingularityDB |
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| "AWS credentials not configured" | Run `aws configure` |
+| X API 401 | Regenerate Bearer Token at developer.x.com |
+| X API 429 | Rate limited — wait and retry |
+| GitHub 404 | Check repo exists and PAT has `repo` scope |
+| Lambda timeout | Code-runner default is 120s; increase if needed |
+| "No new replies" but tweets exist | Verify `WATCHED_TWEET_ID` and keyword "singularityengine" |
+| EventBridge not triggering | Run `singularityengine start` |
+
+📖 **Full setup guide:** [docs/SETUP.md](docs/SETUP.md)
 
 ## Reply Modes
 
@@ -155,10 +227,41 @@ All configured via `singularityengine config` and stored in `.env`:
 
 ## Security
 
-- Input sanitization — injection patterns, blocked content, length limits
-- Output scanning — generated HTML scanned for dangerous patterns
-- Rate limiting — 2 builds per user per hour
-- Sandboxed generation — single-file HTML only, no external deps
+Singularity Engine takes untrusted input from public tweets and generates code. Security is multi-layered:
+
+### 🔒 Environment Variable Isolation
+- **Env vars (API keys, tokens) stay in AWS Lambda** — they are never passed to Claude as context and never appear in generated code
+- Generated apps run as **static HTML on GitHub Pages** — no server, no `process.env`, no access to any secrets
+- The Anthropic API key is used *by* Lambda to call Claude, but the key itself is never included in prompts
+
+### 🛡️ Input Sanitization
+- **30+ injection detection patterns** catch prompt injection attempts ("ignore previous instructions", `process.env`, `eval()`, etc.)
+- **Content filtering** blocks NSFW, weapons, drugs, hacking tools, phishing requests
+- **500 character limit** on build requests
+- **HTML stripping** and character allowlisting
+
+### 🔍 Output Scanning
+Generated HTML is scanned for dangerous patterns before deployment:
+- `process.env`, `require()`, `eval()`, `Function()` — blocked
+- `WebSocket`, `EventSource`, `sendBeacon` — exfiltration channels blocked
+- `document.cookie`, `localStorage` — storage access blocked
+- Unauthorized `fetch()` targets — only SingularityDB API allowed
+- Dynamic URL construction — flagged as potential exfiltration
+
+### 🌐 Content Security Policy
+Every generated app gets a CSP meta tag injected that restricts `connect-src` to only the SingularityDB API. Even if malicious code slips past the scanner, the **browser blocks** unauthorized network requests.
+
+### ⏱️ Rate Limiting
+- 2 builds per user per hour
+- 60-second cooldown between replies
+- Tweet polling every 2 minutes
+
+### 🗄️ API Protection
+- System namespaces (`_system`, `_builds`, `_reply_queue`) are **read-only** via the public API
+- All `_`-prefixed namespaces are reserved and blocked from public writes
+- 100KB max value size to prevent abuse
+
+📖 **Full details:** [docs/SECURITY.md](docs/SECURITY.md)
 
 ## Cost
 

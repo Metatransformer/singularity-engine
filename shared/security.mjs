@@ -96,6 +96,17 @@ export function scanGeneratedCode(html) {
     { pattern: /new\s+Function\s*\(/g, name: "Function constructor" },
     { pattern: /\.innerHTML\s*=/g, name: "innerHTML assignment (XSS risk)" },
     { pattern: /document\.write/g, name: "document.write" },
+    { pattern: /new\s+WebSocket/g, name: "WebSocket (exfiltration channel)" },
+    { pattern: /new\s+EventSource/g, name: "EventSource (exfiltration channel)" },
+    { pattern: /navigator\.sendBeacon/g, name: "sendBeacon (exfiltration channel)" },
+    { pattern: /new\s+Image\s*\(\s*\)[\s\S]*?\.src\s*=/g, name: "Image src exfiltration" },
+    { pattern: /importScripts/g, name: "importScripts (worker import)" },
+    { pattern: /navigator\.serviceWorker/g, name: "Service Worker registration" },
+    { pattern: /SharedWorker|new\s+Worker/g, name: "Web Worker (sandbox escape)" },
+    { pattern: /window\.location\s*[=]/g, name: "location redirect" },
+    { pattern: /document\.location\s*[=]/g, name: "document.location redirect" },
+    { pattern: /top\.location/g, name: "top.location access" },
+    { pattern: /parent\.location/g, name: "parent.location access" },
   ];
 
   for (const { pattern, name } of dangerousPatterns) {
@@ -105,11 +116,40 @@ export function scanGeneratedCode(html) {
   }
 
   // Allow fetch ONLY to singularity-db API
+  // Check string literal URLs
   const fetchMatches = html.matchAll(/fetch\s*\(\s*[`'"](.*?)[`'"]/g);
   for (const match of fetchMatches) {
     const url = match[1];
-    if (!url.includes("execute-api") && !url.includes("singularity-db") && !url.startsWith("$")) {
+    if (!url.includes("execute-api") && !url.includes("singularity-db") && !url.startsWith("$") && !url.startsWith("${")) {
       violations.push(`unauthorized fetch target: ${url}`);
+    }
+  }
+
+  // Check for dynamic fetch URLs (template literals with variables, concatenation)
+  // These are suspicious because they could construct arbitrary URLs at runtime
+  const dynamicFetchPatterns = [
+    /fetch\s*\(\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*[,)]/g,  // fetch(variable)
+    /fetch\s*\(\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*\+/g,      // fetch(var + ...)
+  ];
+  for (const pattern of dynamicFetchPatterns) {
+    if (pattern.test(html)) {
+      // Check if it's the SingularityDB client's fetch (allowlisted)
+      // The DB client uses: fetch(`${this.apiUrl}/...`)
+      // We only flag non-DB-client dynamic fetches
+      const nonDbFetches = html.replace(/class\s+SingularityDB[\s\S]*?^}/m, '');
+      if (pattern.test(nonDbFetches)) {
+        violations.push("dynamic fetch URL (potential exfiltration)");
+      }
+    }
+  }
+
+  // Detect image-based exfiltration patterns
+  if (/\.src\s*=\s*['"`]https?:\/\/(?!.*execute-api)/g.test(html)) {
+    // Allow normal image sources but flag dynamic ones
+    const dynamicSrc = /\.src\s*=\s*[^'"`\s]/g;
+    // Only flag if combined with data that looks like it's sending info
+    if (/\.src\s*=.*(\+|encodeURI|\$\{)/g.test(html)) {
+      violations.push("dynamic src assignment (potential exfiltration)");
     }
   }
 
