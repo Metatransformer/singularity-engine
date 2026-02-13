@@ -135,150 +135,383 @@ const EVENTBRIDGE_RULE = "singularity-tweet-poll";
 // COMMANDS
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ── OS detection ─────────────────────────────────────────────────────────────
+function detectOS() {
+  const platform = process.platform;
+  if (platform === "darwin") return "macos";
+  if (platform === "linux") {
+    try {
+      const release = readFileSync("/etc/os-release", "utf8");
+      if (/debian|ubuntu/i.test(release)) return "debian";
+    } catch {}
+    return "linux";
+  }
+  return platform;
+}
+
+function tryExec(cmd) {
+  try {
+    return execSync(cmd, { stdio: "pipe", encoding: "utf8" }).trim();
+  } catch {
+    return null;
+  }
+}
+
 // ── config ───────────────────────────────────────────────────────────────────
 async function cmdConfig() {
   ensureRepo();
   const { rl, ask, confirm } = createPrompt();
+  const os = detectOS();
 
-  console.log(`\n${c.bold}🦀 Singularity Engine — Configuration${c.reset}\n`);
+  console.log(`\n${c.bold}🦀 Singularity Engine — Setup${c.reset}\n`);
 
   const existing = loadEnv();
-  if (Object.keys(existing).length > 0) {
-    const overwrite = await confirm("Existing .env found. Reconfigure?");
-    if (!overwrite) {
-      console.log("Aborted.");
+  const config = { ...existing };
+
+  // ═══ Step 1: Dependency Check ═══
+  step("📋 Checking dependencies...");
+
+  // Node version
+  const nodeVer = process.version;
+  const nodeMajor = parseInt(nodeVer.slice(1));
+  if (nodeMajor >= 20) {
+    console.log(`  ${c.green}✅${c.reset} node ${nodeVer} (v20+ required)`);
+  } else {
+    console.log(`  ${c.red}❌${c.reset} node ${nodeVer} (v20+ required)`);
+    err("Please upgrade Node.js to v20 or later.");
+    rl.close();
+    return;
+  }
+
+  // AWS CLI
+  const awsVer = tryExec("aws --version");
+  if (awsVer) {
+    const ver = awsVer.split(" ")[0]?.replace("aws-cli/", "") || awsVer;
+    console.log(`  ${c.green}✅${c.reset} aws CLI v${ver}`);
+  } else {
+    console.log(`  ${c.red}❌${c.reset} aws CLI not found`);
+    const install = await confirm("  Install?", "Y");
+    if (install) {
+      const cmd = os === "macos" ? "brew install awscli" : os === "debian" ? "sudo apt install -y awscli" : null;
+      if (cmd) {
+        console.log(`  → ${cmd}`);
+        try { execSync(cmd, { stdio: "inherit" }); ok("aws CLI installed"); } catch { err("Failed to install aws CLI. Install manually: https://aws.amazon.com/cli/"); }
+      } else {
+        info("Install manually: https://aws.amazon.com/cli/");
+      }
+    }
+    if (!tryExec("aws --version")) {
+      err("aws CLI is required. Please install it and re-run config.");
       rl.close();
       return;
     }
   }
 
-  const config = { ...existing };
-
-  // X API
-  console.log(`\n${c.bold}📱 X (Twitter) API${c.reset}`);
-  config.X_BEARER_TOKEN = await ask("Bearer token", config.X_BEARER_TOKEN);
-  config.WATCHED_TWEET_ID = await ask("Tweet ID to watch for replies", config.WATCHED_TWEET_ID);
-  config.OWNER_USERNAME = await ask("Your X username (without @)", config.OWNER_USERNAME);
-
-  // AWS
-  console.log(`\n${c.bold}☁️  AWS${c.reset}`);
-  config.AWS_REGION = await ask("Region", config.AWS_REGION || "us-east-1");
-  config.TABLE_NAME = await ask("DynamoDB table name", config.TABLE_NAME || "singularity-db");
-
-  // GitHub
-  console.log(`\n${c.bold}🐙 GitHub${c.reset}`);
-  config.GITHUB_TOKEN = await ask("Personal access token (repo scope)", config.GITHUB_TOKEN);
-  config.GITHUB_REPO = await ask("Builds repo (org/name)", config.GITHUB_REPO || "Metatransformer/singularity-builds");
-  const defaultPagesUrl = `https://${config.GITHUB_REPO.split("/")[0]}.github.io/${config.GITHUB_REPO.split("/")[1]}`;
-  config.GITHUB_PAGES_URL = await ask("GitHub Pages URL", config.GITHUB_PAGES_URL || defaultPagesUrl);
-
-  // Fork detection
-  if (config.GITHUB_TOKEN && config.GITHUB_REPO) {
-    process.stdout.write(`\n${c.dim}  Checking if ${config.GITHUB_REPO} exists...${c.reset} `);
-    try {
-      const res = await fetch(`https://api.github.com/repos/${config.GITHUB_REPO}`, {
-        headers: { Authorization: `Bearer ${config.GITHUB_TOKEN}` },
-      });
-      if (res.ok) {
-        const repo = await res.json();
-        console.log(repo.fork ? `${c.green}✅ (fork)${c.reset}` : `${c.green}✅ (exists)${c.reset}`);
-      } else if (res.status === 404) {
-        console.log(`${c.yellow}not found${c.reset}`);
-        console.log(`\n  ${c.yellow}You need a builds repo for GitHub Pages deployment.`);
-        console.log(`  Fork https://github.com/Metatransformer/singularity-builds`);
-        console.log(`  Then update GITHUB_REPO to your fork (e.g., your-user/singularity-builds)${c.reset}`);
+  // gh CLI
+  const ghVer = tryExec("gh --version");
+  if (ghVer) {
+    const ver = ghVer.match(/gh version ([\d.]+)/)?.[1] || ghVer;
+    console.log(`  ${c.green}✅${c.reset} gh CLI v${ver}`);
+  } else {
+    console.log(`  ${c.red}❌${c.reset} gh CLI not found`);
+    const install = await confirm("  Install?", "Y");
+    if (install) {
+      const cmd = os === "macos" ? "brew install gh" : os === "debian" ? "sudo apt install -y gh" : null;
+      if (cmd) {
+        console.log(`  → ${cmd}`);
+        try { execSync(cmd, { stdio: "inherit" }); ok("gh CLI installed"); } catch { err("Failed to install gh CLI. Install manually: https://cli.github.com"); }
+      } else {
+        info("Install manually: https://cli.github.com");
       }
-    } catch {
-      console.log(`${c.dim}(couldn't check)${c.reset}`);
+    }
+    if (!tryExec("gh --version")) {
+      err("gh CLI is required. Please install it and re-run config.");
+      rl.close();
+      return;
     }
   }
 
-  // Anthropic
-  console.log(`\n${c.bold}🤖 Anthropic${c.reset}`);
-  config.ANTHROPIC_API_KEY = await ask("API key", config.ANTHROPIC_API_KEY);
+  // ═══ Credentials Check ═══
+  step("\n📋 Checking credentials...");
 
-  // SingularityDB
-  console.log(`\n${c.bold}🗄️  SingularityDB${c.reset}`);
-  config.SINGULARITY_DB_URL = await ask("API Gateway URL (set after deploy)", config.SINGULARITY_DB_URL);
+  // AWS credentials
+  const awsRegion = tryExec("aws configure get region");
+  const awsIdentity = tryExec("aws sts get-caller-identity --output json");
+  if (awsIdentity) {
+    const identity = JSON.parse(awsIdentity);
+    const acct = identity.Account;
+    console.log(`  ${c.green}✅${c.reset} AWS configured (${awsRegion || "us-east-1"}, account ${acct})`);
+    config.AWS_REGION = awsRegion || "us-east-1";
+  } else {
+    console.log(`  ${c.red}❌${c.reset} AWS not configured`);
+    info("Running: aws configure");
+    try { execSync("aws configure", { stdio: "inherit" }); } catch {}
+    const region2 = tryExec("aws configure get region");
+    config.AWS_REGION = region2 || "us-east-1";
+  }
+
+  // GitHub auth
+  const ghToken = tryExec("gh auth token");
+  if (ghToken) {
+    const ghUser = tryExec("gh api /user -q .login");
+    console.log(`  ${c.green}✅${c.reset} GitHub authenticated (${ghUser || "unknown"})`);
+    config.GITHUB_TOKEN = ghToken;
+  } else {
+    console.log(`  ${c.red}❌${c.reset} GitHub not authenticated`);
+    info("Running: gh auth login");
+    try { execSync("gh auth login", { stdio: "inherit" }); } catch {}
+    const token2 = tryExec("gh auth token");
+    if (token2) {
+      config.GITHUB_TOKEN = token2;
+      ok("GitHub authenticated");
+    } else {
+      warn("GitHub auth failed — you can set GITHUB_TOKEN manually in .env");
+    }
+  }
+
+  // ═══ Step 2: API Keys (manual) ═══
+  console.log(`\n${c.bold}🔑 API Keys${c.reset} ${c.dim}(these can't be auto-detected)${c.reset}\n`);
+
+  // Anthropic
+  const PLACEHOLDERS = new Set([
+    "your_x_bearer_token", "your_tweet_id", "your_x_username",
+    "your_github_token", "your-org/singularity-builds",
+    "https://your-org.github.io/singularity-builds",
+    "your_anthropic_api_key",
+    "https://your-api-gateway.execute-api.us-east-1.amazonaws.com/api/data",
+    "your_consumer_key", "your_consumer_secret",
+    "your_access_token", "your_access_token_secret",
+  ]);
+  const isPlaceholder = (val) => !val || PLACEHOLDERS.has(val) || /^your[_-]/.test(val);
+
+  const existingAnthro = isPlaceholder(config.ANTHROPIC_API_KEY) ? "" : config.ANTHROPIC_API_KEY;
+  config.ANTHROPIC_API_KEY = await ask("Anthropic API key", existingAnthro);
+  if (config.ANTHROPIC_API_KEY) {
+    // Quick validation
+    process.stdout.write(`  ${c.dim}Validating...${c.reset} `);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": config.ANTHROPIC_API_KEY, "content-type": "application/json", "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
+      });
+      console.log(res.ok || res.status === 400 ? `${c.green}✅ Validated${c.reset}` : `${c.red}❌ (${res.status})${c.reset}`);
+    } catch (e) {
+      console.log(`${c.yellow}⚠️  Could not validate (${e.message})${c.reset}`);
+    }
+  }
 
   // Reply Mode
   console.log(`\n${c.bold}📤 Reply Mode${c.reset}`);
-  console.log(`  ${c.dim}openclaw = browser automation (no API write access needed)`);
-  console.log(`  x-api    = X API v2 direct posting (fast, scalable)${c.reset}`);
-  config.REPLY_MODE = await ask("Reply mode", config.REPLY_MODE || "openclaw");
+  console.log(`  ${c.dim}How should the bot reply to tweets?${c.reset}`);
+  console.log(`  1. openclaw — browser automation (no X write access needed)`);
+  console.log(`  2. x-api — X API v2 direct posting (fast, needs OAuth)`);
+  const modeChoice = await ask("Choice", config.REPLY_MODE === "x-api" ? "2" : "1");
+  config.REPLY_MODE = modeChoice === "2" ? "x-api" : "openclaw";
 
-  if (config.REPLY_MODE === "x-api") {
-    console.log(`\n${c.bold}🔑 X API OAuth 1.0a${c.reset} ${c.dim}(developer.x.com)${c.reset}`);
-    config.X_CONSUMER_KEY = await ask("Consumer Key", config.X_CONSUMER_KEY);
-    config.X_CONSUMER_SECRET = await ask("Consumer Secret", config.X_CONSUMER_SECRET);
-    config.X_ACCESS_TOKEN = await ask("Access Token", config.X_ACCESS_TOKEN);
-    config.X_ACCESS_TOKEN_SECRET = await ask("Access Token Secret", config.X_ACCESS_TOKEN_SECRET);
-  }
+  // X API Bearer token
+  console.log(`\n${c.bold}🐦 X API${c.reset}`);
+  const existingBearer = isPlaceholder(config.X_BEARER_TOKEN) ? "" : config.X_BEARER_TOKEN;
+  config.X_BEARER_TOKEN = await ask("Bearer token (for reading tweets)", existingBearer);
 
-  // OpenClaw
-  console.log(`\n${c.bold}🌐 OpenClaw${c.reset} ${c.dim}(optional)${c.reset}`);
-  config.OPENCLAW_CDP_PORT = await ask("CDP port", config.OPENCLAW_CDP_PORT || "18800");
-
-  // ── Validate tokens ──
-  console.log();
-
-  // Validate X Bearer
+  let detectedUsername = null;
   if (config.X_BEARER_TOKEN) {
-    process.stdout.write(`${c.dim}  Validating X API token...${c.reset} `);
+    process.stdout.write(`  ${c.dim}Validating...${c.reset} `);
     try {
-      const res = await fetch("https://api.twitter.com/2/tweets/search/recent?query=test&max_results=10", {
+      // Try /2/users/me first (works with OAuth 2.0 user context tokens)
+      const meRes = await fetch("https://api.twitter.com/2/users/me", {
         headers: { Authorization: `Bearer ${config.X_BEARER_TOKEN}` },
       });
-      console.log(res.ok ? `${c.green}✅${c.reset}` : `${c.red}❌ (${res.status})${c.reset}`);
-    } catch (e) {
-      console.log(`${c.red}❌ (${e.message})${c.reset}`);
-    }
-  }
-
-  // Validate X OAuth
-  if (config.REPLY_MODE === "x-api" && config.X_CONSUMER_KEY) {
-    process.stdout.write(`${c.dim}  Validating X OAuth credentials...${c.reset} `);
-    try {
-      const { validateCredentials } = await import(join(REPO_ROOT, "shared/x-api-client.mjs"));
-      const result = await validateCredentials({
-        consumerKey: config.X_CONSUMER_KEY,
-        consumerSecret: config.X_CONSUMER_SECRET,
-        accessToken: config.X_ACCESS_TOKEN,
-        accessTokenSecret: config.X_ACCESS_TOKEN_SECRET,
-      });
-      console.log(result.ok ? `${c.green}✅ (@${result.username})${c.reset}` : `${c.red}❌ (${result.error})${c.reset}`);
-    } catch (e) {
-      console.log(`${c.red}❌ (${e.message})${c.reset}`);
-    }
-  }
-
-  // Validate GitHub
-  if (config.GITHUB_TOKEN) {
-    process.stdout.write(`${c.dim}  Validating GitHub token...${c.reset} `);
-    try {
-      const res = await fetch("https://api.github.com/user", {
-        headers: { Authorization: `Bearer ${config.GITHUB_TOKEN}` },
-      });
-      if (res.ok) {
-        const user = await res.json();
-        console.log(`${c.green}✅ (${user.login})${c.reset}`);
+      if (meRes.ok) {
+        const me = await meRes.json();
+        detectedUsername = me.data?.username;
+        console.log(`${c.green}✅ Validated — authenticated as @${detectedUsername}${c.reset}`);
       } else {
-        console.log(`${c.red}❌ (${res.status})${c.reset}`);
+        // Fallback: just check the token works for reading
+        const searchRes = await fetch("https://api.twitter.com/2/tweets/search/recent?query=test&max_results=10", {
+          headers: { Authorization: `Bearer ${config.X_BEARER_TOKEN}` },
+        });
+        if (searchRes.ok) {
+          console.log(`${c.green}✅ Validated (app-only token, no user context)${c.reset}`);
+        } else {
+          console.log(`${c.red}❌ (${searchRes.status})${c.reset}`);
+        }
       }
     } catch (e) {
       console.log(`${c.red}❌ (${e.message})${c.reset}`);
     }
   }
 
-  saveEnv(config);
-  ok(".env written!");
+  // Owner username
+  if (detectedUsername) {
+    config.OWNER_USERNAME = detectedUsername;
+  } else {
+    const existingOwner = isPlaceholder(config.OWNER_USERNAME) ? "" : config.OWNER_USERNAME;
+    config.OWNER_USERNAME = await ask("Your X username (without @)", existingOwner);
+  }
 
-  console.log(`\n${c.bold}Next steps:${c.reset}`);
-  console.log(`  ${c.cyan}singularityengine deploy${c.reset}   — Deploy to AWS`);
-  console.log(`  ${c.cyan}singularityengine status${c.reset}   — Check infrastructure`);
-  console.log(`  ${c.cyan}singularityengine start${c.reset}    — Enable tweet polling\n`);
+  // X API OAuth (only if x-api mode)
+  if (config.REPLY_MODE === "x-api") {
+    console.log(`\n${c.bold}🔑 X API OAuth 1.0a${c.reset} ${c.dim}(developer.x.com — needed for posting)${c.reset}`);
+    config.X_CONSUMER_KEY = await ask("Consumer Key", isPlaceholder(config.X_CONSUMER_KEY) ? "" : config.X_CONSUMER_KEY);
+    config.X_CONSUMER_SECRET = await ask("Consumer Secret", isPlaceholder(config.X_CONSUMER_SECRET) ? "" : config.X_CONSUMER_SECRET);
+    config.X_ACCESS_TOKEN = await ask("Access Token", isPlaceholder(config.X_ACCESS_TOKEN) ? "" : config.X_ACCESS_TOKEN);
+    config.X_ACCESS_TOKEN_SECRET = await ask("Access Token Secret", isPlaceholder(config.X_ACCESS_TOKEN_SECRET) ? "" : config.X_ACCESS_TOKEN_SECRET);
+
+    if (config.X_CONSUMER_KEY) {
+      process.stdout.write(`  ${c.dim}Validating OAuth...${c.reset} `);
+      try {
+        const { validateCredentials } = await import(join(REPO_ROOT, "shared/x-api-client.mjs"));
+        const result = await validateCredentials({
+          consumerKey: config.X_CONSUMER_KEY,
+          consumerSecret: config.X_CONSUMER_SECRET,
+          accessToken: config.X_ACCESS_TOKEN,
+          accessTokenSecret: config.X_ACCESS_TOKEN_SECRET,
+        });
+        console.log(result.ok ? `${c.green}✅ (@${result.username})${c.reset}` : `${c.red}❌ (${result.error})${c.reset}`);
+      } catch (e) {
+        console.log(`${c.red}❌ (${e.message})${c.reset}`);
+      }
+    }
+  }
+
+  // OpenClaw CDP port (only if openclaw mode, with sensible default)
+  if (config.REPLY_MODE === "openclaw") {
+    config.OPENCLAW_CDP_PORT = config.OPENCLAW_CDP_PORT || "18800";
+  }
+
+  // ═══ Step 3: Auto-Configure GitHub ═══
+  console.log(`\n${c.bold}🐙 GitHub Setup${c.reset}`);
+  const ghUser = tryExec("gh api /user -q .login");
+
+  if (ghUser) {
+    console.log(`  Checking for singularity-builds fork...`);
+    const forkCheck = tryExec(`gh api repos/${ghUser}/singularity-builds -q .full_name 2>/dev/null`);
+    if (forkCheck) {
+      console.log(`  ${c.green}✅${c.reset} Found: ${forkCheck}`);
+      config.GITHUB_REPO = forkCheck;
+    } else {
+      console.log(`  ${c.red}❌${c.reset} Not found.`);
+      const doFork = await confirm("  Fork Metatransformer/singularity-builds?", "Y");
+      if (doFork) {
+        console.log(`  → gh repo fork Metatransformer/singularity-builds --clone=false`);
+        try {
+          execSync("gh repo fork Metatransformer/singularity-builds --clone=false", { stdio: "pipe" });
+          config.GITHUB_REPO = `${ghUser}/singularity-builds`;
+          ok(`Forked to ${config.GITHUB_REPO}`);
+        } catch (e) {
+          warn(`Fork failed: ${e.message}`);
+          config.GITHUB_REPO = config.GITHUB_REPO || `${ghUser}/singularity-builds`;
+        }
+      } else {
+        config.GITHUB_REPO = isPlaceholder(config.GITHUB_REPO) ? `${ghUser}/singularity-builds` : config.GITHUB_REPO;
+      }
+    }
+  } else {
+    config.GITHUB_REPO = isPlaceholder(config.GITHUB_REPO) ? "Metatransformer/singularity-builds" : config.GITHUB_REPO;
+  }
+
+  // Derive Pages URL
+  const [repoOwner, repoName] = config.GITHUB_REPO.split("/");
+  config.GITHUB_PAGES_URL = `https://${repoOwner}.github.io/${repoName}`;
+  console.log(`  ${c.green}✅${c.reset} GitHub Pages URL: ${config.GITHUB_PAGES_URL}`);
+
+  // Auto-set defaults
+  config.TABLE_NAME = config.TABLE_NAME || "singularity-db";
+
+  // ═══ Step 4: Save and Summarize ═══
+  saveEnv(config);
+
+  // Get AWS account for summary
+  let awsAcct = "";
+  try {
+    const id = JSON.parse(tryExec("aws sts get-caller-identity --output json") || "{}");
+    awsAcct = id.Account ? ` (account ${id.Account})` : "";
+  } catch {}
+
+  console.log(`\n${c.green}✅ Configuration saved to .env${c.reset}`);
+  console.log(`\n${c.bold}📋 Summary:${c.reset}`);
+  console.log(`  Anthropic API ${isPlaceholder(config.ANTHROPIC_API_KEY) ? c.red + "❌" : c.green + "✅"}${c.reset}`);
+  console.log(`  X API (read)  ${isPlaceholder(config.X_BEARER_TOKEN) ? c.red + "❌" : c.green + "✅"}${c.reset}${config.OWNER_USERNAME ? ` (@${config.OWNER_USERNAME})` : ""}`);
+  console.log(`  Reply mode    ${config.REPLY_MODE}`);
+  console.log(`  AWS           ${config.AWS_REGION}${awsAcct}`);
+  console.log(`  GitHub        ${config.GITHUB_REPO}`);
+  console.log(`  Pages URL     ${config.GITHUB_PAGES_URL}`);
+
+  console.log(`\n${c.bold}Next:${c.reset} ${c.cyan}singularityengine deploy${c.reset}\n`);
 
   rl.close();
+}
+
+// ── watch ────────────────────────────────────────────────────────────────────
+async function cmdWatch(args) {
+  ensureRepo();
+  const env = loadEnv();
+  const tweetId = args[0];
+
+  if (!tweetId) {
+    // Show current watched tweet
+    const current = env.WATCHED_TWEET_ID;
+    const PLACEHOLDERS = new Set(["your_tweet_id"]);
+    const isPlaceholder = (val) => !val || PLACEHOLDERS.has(val) || /^your[_-]/.test(val);
+    if (isPlaceholder(current)) {
+      info("No tweet currently being watched.");
+      console.log(`  Usage: ${c.cyan}singularityengine watch <tweet_id>${c.reset}\n`);
+      return;
+    }
+    console.log(`\n  Currently watching tweet ${c.bold}${current}${c.reset}`);
+
+    // Fetch tweet details if bearer token available
+    if (env.X_BEARER_TOKEN && !isPlaceholder(env.X_BEARER_TOKEN)) {
+      try {
+        const res = await fetch(
+          `https://api.twitter.com/2/tweets/${current}?expansions=author_id&tweet.fields=public_metrics&user.fields=username`,
+          { headers: { Authorization: `Bearer ${env.X_BEARER_TOKEN}` } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.data?.text || "";
+          const username = data.includes?.users?.[0]?.username || "unknown";
+          const replies = data.data?.public_metrics?.reply_count || 0;
+          console.log(`  "${text.slice(0, 80)}${text.length > 80 ? "..." : ""}"`);
+          console.log(`  By @${username} (${replies} replies so far)`);
+        }
+      } catch {}
+    }
+    console.log();
+    return;
+  }
+
+  // Set new watched tweet
+  env.WATCHED_TWEET_ID = tweetId;
+  saveEnv(env);
+  ok(`Now watching tweet ${tweetId}`);
+
+  // Fetch tweet details
+  const PLACEHOLDERS2 = new Set(["your_x_bearer_token"]);
+  if (env.X_BEARER_TOKEN && !PLACEHOLDERS2.has(env.X_BEARER_TOKEN) && !/^your[_-]/.test(env.X_BEARER_TOKEN)) {
+    process.stdout.write(`  ${c.dim}Fetching tweet...${c.reset} `);
+    try {
+      const res = await fetch(
+        `https://api.twitter.com/2/tweets/${tweetId}?expansions=author_id&tweet.fields=public_metrics&user.fields=username`,
+        { headers: { Authorization: `Bearer ${env.X_BEARER_TOKEN}` } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.data?.text || "";
+        const username = data.includes?.users?.[0]?.username || "unknown";
+        const replies = data.data?.public_metrics?.reply_count || 0;
+        console.log();
+        console.log(`  "${text.slice(0, 80)}${text.length > 80 ? "..." : ""}"`);
+        console.log(`  By @${username} (${replies} replies so far)`);
+      } else {
+        console.log(`${c.yellow}could not fetch (${res.status})${c.reset}`);
+      }
+    } catch (e) {
+      console.log(`${c.yellow}could not fetch (${e.message})${c.reset}`);
+    }
+  }
+  console.log();
 }
 
 // ── deploy ───────────────────────────────────────────────────────────────────
@@ -1028,7 +1261,8 @@ ${c.dim}Autonomous tweet-to-app pipeline${c.reset}
 ${c.bold}Usage:${c.reset} singularityengine <command> [options]
 
 ${c.bold}Commands:${c.reset}
-  ${c.cyan}config${c.reset}      Interactive setup — configure API keys, tokens, and settings
+  ${c.cyan}config${c.reset}      Interactive setup — auto-detects deps & credentials
+  ${c.cyan}watch${c.reset}       Set or show the watched tweet ID
   ${c.cyan}deploy${c.reset}      Deploy infrastructure to AWS (Lambda, DynamoDB, EventBridge)
   ${c.cyan}status${c.reset}      Show infrastructure health, config, and bot status
   ${c.cyan}start${c.reset}       Enable tweet polling (resume after stop)
@@ -1042,9 +1276,10 @@ ${c.bold}Options:${c.reset}
   ${c.cyan}--help${c.reset}      Show this help message
 
 ${c.bold}Quick Start:${c.reset}
-  ${c.dim}$ singularityengine config    # Set up API keys${c.reset}
-  ${c.dim}$ singularityengine deploy    # Deploy to AWS${c.reset}
-  ${c.dim}$ singularityengine status    # Verify everything works${c.reset}
+  ${c.dim}$ singularityengine config              # Set up (auto-detects most things)${c.reset}
+  ${c.dim}$ singularityengine deploy              # Deploy to AWS${c.reset}
+  ${c.dim}$ singularityengine watch 1234567890    # Set tweet to watch${c.reset}
+  ${c.dim}$ singularityengine status              # Verify everything works${c.reset}
 
 ${c.bold}Docs:${c.reset} https://github.com/Metatransformer/singularity-engine
 `);
@@ -1056,6 +1291,7 @@ const command = args[0];
 
 switch (command) {
   case "config": await cmdConfig(); break;
+  case "watch": await cmdWatch(args.slice(1)); break;
   case "deploy": await cmdDeploy(args.slice(1)); break;
   case "status": await cmdStatus(); break;
   case "stop": await cmdStop(); break;
