@@ -32,16 +32,33 @@ function cors(body, status = 200) {
   };
 }
 
-async function getBuilds(page, perPage) {
-  // Query _showcase namespace, sorted by coolness
+async function getBuilds(page, perPage, sort = "created_at", search = "") {
+  // Query _showcase namespace
   const result = await ddb.send(new QueryCommand({
     TableName: TABLE,
     KeyConditionExpression: "ns = :ns",
     ExpressionAttributeValues: { ":ns": "_showcase" },
   }));
 
-  const items = (result.Items || [])
-    .sort((a, b) => (b.value?.score || 0) - (a.value?.score || 0));
+  let items = result.Items || [];
+
+  // Search filter (case-insensitive partial match on name or username)
+  if (search) {
+    const q = search.toLowerCase();
+    items = items.filter((item) => {
+      const name = (item.value?.name || "").toLowerCase();
+      const username = (item.value?.username || "").toLowerCase();
+      return name.includes(q) || username.includes(q);
+    });
+  }
+
+  // Sort
+  if (sort === "coolness") {
+    items.sort((a, b) => (b.value?.score || 0) - (a.value?.score || 0));
+  } else {
+    // Default: created_at (most recent first)
+    items.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  }
 
   const total = items.length;
   const start = (page - 1) * perPage;
@@ -114,7 +131,9 @@ export async function handler(event) {
       const qs = event.queryStringParameters || {};
       const page = Math.max(1, parseInt(qs.page) || 1);
       const perPage = Math.min(100, Math.max(1, parseInt(qs.per_page) || 10));
-      return cors(await getBuilds(page, perPage));
+      const sort = qs.sort === "coolness" ? "coolness" : "created_at";
+      const search = (qs.search || "").trim();
+      return cors(await getBuilds(page, perPage, sort, search));
     }
 
     // GET /api/builds/:id
