@@ -10,14 +10,18 @@
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { xApiPostReply } from "./shared/x-api-client.mjs";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = process.env.TABLE_NAME || "singularity-db";
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO || "Metatransformer/singularity-builds";
 const GITHUB_PAGES_URL = process.env.GITHUB_PAGES_URL || "https://your-org.github.io/singularity-builds";
-const RELAY_URL = process.env.RELAY_URL;
-const RELAY_SECRET = process.env.RELAY_SECRET;
+const REPLY_MODE = process.env.REPLY_MODE || "openclaw";
+const X_CONSUMER_KEY = process.env.X_CONSUMER_KEY;
+const X_CONSUMER_SECRET = process.env.X_CONSUMER_SECRET;
+const X_ACCESS_TOKEN = process.env.X_ACCESS_TOKEN;
+const X_ACCESS_TOKEN_SECRET = process.env.X_ACCESS_TOKEN_SECRET;
 
 function rateCoolness(request, htmlSize) {
   let score = 50; // base
@@ -66,36 +70,49 @@ async function pushToGitHub(appId, html) {
 }
 
 async function queueReply(tweetId, username, appUrl, request) {
-  // Store in DynamoDB reply queue
+  const replyText = `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by SingularityEngine 🦀\nhttps://github.com/Metatransformer/singularity-engine`;
+
+  // Try posting directly via X API if configured
+  if (REPLY_MODE === "x-api" && X_CONSUMER_KEY && X_ACCESS_TOKEN) {
+    try {
+      const result = await xApiPostReply(tweetId, replyText, {
+        consumerKey: X_CONSUMER_KEY,
+        consumerSecret: X_CONSUMER_SECRET,
+        accessToken: X_ACCESS_TOKEN,
+        accessTokenSecret: X_ACCESS_TOKEN_SECRET,
+      });
+      if (result.ok) {
+        console.log(`✅ Reply posted via X API: ${result.tweetId}`);
+        // Still log to reply queue as "done"
+        await ddb.send(new PutCommand({
+          TableName: TABLE,
+          Item: {
+            ns: "_reply_queue",
+            key: `${Date.now()}-${tweetId}`,
+            value: { tweetId, username, appUrl, request, replyText, replyTweetId: result.tweetId },
+            updatedAt: new Date().toISOString(),
+            status: "done",
+          },
+        }));
+        return;
+      }
+      console.log(`⚠️ X API reply failed: ${result.error}, falling back to queue`);
+    } catch (err) {
+      console.log(`⚠️ X API reply error: ${err.message}, falling back to queue`);
+    }
+  }
+
+  // Fallback: queue for local poller pickup
   await ddb.send(new PutCommand({
     TableName: TABLE,
     Item: {
       ns: "_reply_queue",
       key: `${Date.now()}-${tweetId}`,
-      value: {
-        tweetId, username, appUrl, request,
-        replyText: `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by SingularityEngine 🦀\nhttps://github.com/Metatransformer/singularity-engine`,
-      },
+      value: { tweetId, username, appUrl, request, replyText },
       updatedAt: new Date().toISOString(),
       status: "pending",
     },
   }));
-
-  // Also try to notify local relay immediately (best-effort)
-  if (RELAY_URL) {
-    try {
-      await fetch(`${RELAY_URL}/queue`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Relay-Secret": RELAY_SECRET,
-        },
-        body: JSON.stringify({ tweetId, username, appUrl, request }),
-      });
-    } catch (err) {
-      console.log("Relay notification failed (will be picked up by polling):", err.message);
-    }
-  }
 }
 
 export async function handler(event) {
