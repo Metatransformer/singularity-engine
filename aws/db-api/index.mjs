@@ -1,12 +1,12 @@
 /**
- * SingularityDB API Lambda
+ * MetatransformrDB API Lambda
  * Serves build data from DynamoDB for embedding on websites.
  *
  * Routes:
  *   GET  /api/builds?page=1&per_page=10           — paginated builds list (public gallery)
  *   GET  /api/builds/:id                           — single build by ID
- *   GET  /api/data/:namespace/:key                 — raw key-value get (SingularityDB)
- *   POST /api/data/:namespace/:key  {value}        — raw key-value put (SingularityDB)
+ *   GET  /api/data/:namespace/:key                 — raw key-value get (MetatransformrDB)
+ *   POST /api/data/:namespace/:key  {value}        — raw key-value put (MetatransformrDB)
  *   GET  /api/data/:namespace                      — list keys in namespace
  */
 
@@ -14,7 +14,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-const TABLE = process.env.TABLE_NAME || "singularity-db";
+const TABLE = process.env.TABLE_NAME || "metatransformr-db";
 
 // System namespaces that cannot be written to via the public API
 const PROTECTED_NAMESPACES = new Set(["_system", "_builds", "_reply_queue", "_showcase"]);

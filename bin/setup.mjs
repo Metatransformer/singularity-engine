@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Interactive setup for Singularity Engine
+ * Interactive setup for Metatransformr OS
  * Prompts for config values, validates tokens, writes .env
  */
 
@@ -14,7 +14,7 @@ const ask = (q, def) => new Promise(resolve => {
 });
 
 async function main() {
-  console.log("🦀 Singularity Engine Setup\n");
+  console.log("🦀 Metatransformr OS Setup\n");
 
   if (existsSync(".env")) {
     const overwrite = await ask("⚠️  .env already exists. Overwrite? (y/N)", "N");
@@ -33,18 +33,18 @@ async function main() {
 
   console.log("\n☁️  AWS");
   config.AWS_REGION = await ask("  Region", "us-east-1");
-  config.TABLE_NAME = await ask("  DynamoDB table name", "singularity-db");
+  config.TABLE_NAME = await ask("  DynamoDB table name", "metatransformr-db");
 
   console.log("\n🐙 GitHub");
   config.GITHUB_TOKEN = await ask("  Personal access token (repo scope)");
-  config.GITHUB_REPO = await ask("  Builds repo (org/name)", "your-org/singularity-builds");
+  config.GITHUB_REPO = await ask("  Builds repo (org/name)", "your-org/metatransformr-builds");
   config.GITHUB_PAGES_URL = await ask("  GitHub Pages URL", `https://${config.GITHUB_REPO.split("/")[0]}.github.io/${config.GITHUB_REPO.split("/")[1]}`);
 
   console.log("\n🤖 Anthropic");
   config.ANTHROPIC_API_KEY = await ask("  API key");
 
-  console.log("\n🗄️  SingularityDB");
-  config.SINGULARITY_DB_URL = await ask("  API Gateway URL (set after deploy-aws.sh)");
+  console.log("\n🗄️  MetatransformrDB");
+  config.METATRANSFORMR_DB_URL = await ask("  API Gateway URL (set after deploy-aws.sh)");
 
   console.log("\n📤 Reply Mode");
   console.log("  openclaw = browser automation (default, no API write access needed)");

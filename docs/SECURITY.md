@@ -2,7 +2,7 @@
 
 ## Threat Model
 
-Singularity Engine accepts **untrusted input from public tweets** and uses it to generate code via an AI model. This is inherently high-risk. The security model is designed around the principle that **generated code must never have access to secrets or server-side capabilities**.
+Metatransformr OS accepts **untrusted input from public tweets** and uses it to generate code via an AI model. This is inherently high-risk. The security model is designed around the principle that **generated code must never have access to secrets or server-side capabilities**.
 
 ### Trust Boundaries
 
@@ -25,7 +25,7 @@ Singularity Engine accepts **untrusted input from public tweets** and uses it to
 ┌────────╨────────────────────────────────────────────────┐
 │  GitHub Pages (Untrusted — runs user-facing code)       │
 │  Static HTML only. No server. No env vars. No secrets.  │
-│  CSP restricts fetch to SingularityDB API only.         │
+│  CSP restricts fetch to MetatransformrDB API only.         │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -78,7 +78,7 @@ Scans Claude's generated HTML for dangerous patterns:
 - `Image.src` exfiltration
 - `Worker` / `SharedWorker` / `ServiceWorker`
 - Location redirects (`window.location =`)
-- Unauthorized `fetch()` targets (only SingularityDB API allowed)
+- Unauthorized `fetch()` targets (only MetatransformrDB API allowed)
 - Dynamic fetch URLs that could construct arbitrary endpoints
 
 ### Layer 4: Content Security Policy
@@ -98,7 +98,7 @@ This means even if a pattern slips past the scanner, the **browser itself blocks
 
 ## API Security
 
-### SingularityDB Public API
+### MetatransformrDB Public API
 The db-api Lambda provides a key-value store for generated apps. Security measures:
 - **Protected namespaces:** `_system`, `_builds`, `_reply_queue`, `_showcase` cannot be written to via the public API
 - **Reserved prefix:** All namespaces starting with `_` are blocked from public writes
@@ -108,7 +108,7 @@ The db-api Lambda provides a key-value store for generated apps. Security measur
 ### DynamoDB
 - No SQL injection possible (DynamoDB is NoSQL with structured queries)
 - Partition key (`ns`) + sort key (`key`) schema prevents cross-namespace access
-- IAM role restricts Lambda to only the singularity-db table
+- IAM role restricts Lambda to only the metatransformr-db table
 
 ## Rate Limiting
 
@@ -123,7 +123,7 @@ The db-api Lambda provides a key-value store for generated apps. Security measur
 
 1. **Claude is not deterministic.** Despite explicit instructions, Claude *could* generate code that violates rules. The output scanner and CSP are the safety nets.
 2. **`innerHTML` is allowed.** Many UI patterns require it. XSS risk is mitigated by the fact that apps are isolated on their own GitHub Pages path with no cookies or auth to steal.
-3. **No authentication on the public API.** Anyone can read from any namespace. Don't store sensitive data in SingularityDB.
+3. **No authentication on the public API.** Anyone can read from any namespace. Don't store sensitive data in MetatransformrDB.
 4. **Rate limiting is per-username, not per-IP.** Someone could create multiple X accounts to bypass limits.
 
 ## Reporting Security Issues

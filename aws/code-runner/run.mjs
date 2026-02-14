@@ -41,7 +41,7 @@ async function generateApp(request, appId) {
 
   // Inject Content-Security-Policy meta tag to restrict runtime behavior
   // Only allow fetch to our API Gateway, block all other external connections
-  const dbUrl = process.env.SINGULARITY_DB_URL || "";
+  const dbUrl = process.env.METATRANSFORMR_DB_URL || "";
   const dbOrigin = dbUrl ? new URL(dbUrl).origin : "https://*.execute-api.*.amazonaws.com";
   const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src ${dbOrigin}; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">`;
   
@@ -56,9 +56,9 @@ async function generateApp(request, appId) {
   const scan = scanGeneratedCode(cleanHtml);
   if (!scan.safe) {
     console.warn(`⚠️ Security violations detected:`, scan.violations);
-    // Allow expected patterns from SingularityDB usage, block everything else
+    // Allow expected patterns from MetatransformrDB usage, block everything else
     const allowedViolations = [
-      "fetch() call — needs allowlist check",  // SingularityDB uses fetch
+      "fetch() call — needs allowlist check",  // MetatransformrDB uses fetch
       "innerHTML assignment (XSS risk)",         // Common in UI code (low risk for static HTML)
     ];
     const critical = scan.violations.filter(v => !allowedViolations.includes(v));

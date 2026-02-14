@@ -4,7 +4,7 @@
  * 
  * Flow:
  * 1. Receive HTML + metadata from code runner
- * 2. Push to GitHub repo (metatransformer/singularity-builds)
+ * 2. Push to GitHub repo (metatransformer/metatransformr-builds)
  * 3. Queue reply to local relay endpoint
  */
 
@@ -12,10 +12,10 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-const TABLE = process.env.TABLE_NAME || "singularity-db";
+const TABLE = process.env.TABLE_NAME || "metatransformr-db";
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_REPO = process.env.GITHUB_REPO || "Metatransformer/singularity-builds";
-const GITHUB_PAGES_URL = process.env.GITHUB_PAGES_URL || "https://your-org.github.io/singularity-builds";
+const GITHUB_REPO = process.env.GITHUB_REPO || "Metatransformer/metatransformr-builds";
+const GITHUB_PAGES_URL = process.env.GITHUB_PAGES_URL || "https://your-org.github.io/metatransformr-builds";
 const RELAY_URL = process.env.RELAY_URL;
 const RELAY_SECRET = process.env.RELAY_SECRET;
 
@@ -74,7 +74,7 @@ async function queueReply(tweetId, username, appUrl, request) {
       key: `${Date.now()}-${tweetId}`,
       value: {
         tweetId, username, appUrl, request,
-        replyText: `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by SingularityEngine 🦀\nhttps://github.com/Metatransformer/singularity-engine`,
+        replyText: `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by Metatransformr 🦀\nhttps://github.com/Metatransformer/metatransformr`,
       },
       updatedAt: new Date().toISOString(),
       status: "pending",

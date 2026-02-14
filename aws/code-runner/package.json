@@ -1,5 +1,5 @@
 {
-  "name": "singularity-code-runner",
+  "name": "metatransformr-code-runner",
   "version": "1.0.0",
   "type": "module",
   "dependencies": {

@@ -11,9 +11,9 @@ import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const lambda = new LambdaClient({});
 
-const TABLE = process.env.TABLE_NAME || "singularity-db";
-const CODE_RUNNER_FN = process.env.CODE_RUNNER_FUNCTION || "singularity-code-runner";
-const DEPLOYER_FN = process.env.DEPLOYER_FUNCTION || "singularity-deployer";
+const TABLE = process.env.TABLE_NAME || "metatransformr-db";
+const CODE_RUNNER_FN = process.env.CODE_RUNNER_FUNCTION || "metatransformr-code-runner";
+const DEPLOYER_FN = process.env.DEPLOYER_FUNCTION || "metatransformr-deployer";
 const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
 const WATCHED_TWEET_ID = process.env.WATCHED_TWEET_ID;
 const OWNER_USERNAME = process.env.OWNER_USERNAME || "your_x_username"; // Skip self-replies
@@ -60,9 +60,9 @@ async function getUserBuildCount(username) {
 
 // --- Trigger detection ---
 // Two valid triggers:
-// 1. Reply to a registered thread containing "singularityengine <request>"
-// 2. @mention of owner containing "singularityengine <request>"
-const TRIGGER_RE = /singularityengine\s+(.+)/i;
+// 1. Reply to a registered thread containing "metatransformr <request>"
+// 2. @mention of owner containing "metatransformr <request>"
+const TRIGGER_RE = /metatransformr\s+(.+)/i;
 
 function extractBuildRequest(text, tweetMeta) {
   const match = text.match(TRIGGER_RE);
@@ -72,18 +72,18 @@ function extractBuildRequest(text, tweetMeta) {
 
 // --- X API ---
 async function fetchReplies(sinceId) {
-  // Strategy: search for tweets mentioning "singularityengine" that either:
+  // Strategy: search for tweets mentioning "metatransformr" that either:
   // - Are in a registered thread (conversation_id matches WATCHED_TWEET_ID)
   // - Or @mention the owner
   const queries = [];
 
   if (WATCHED_TWEET_ID) {
     // Replies to the registered thread
-    queries.push(`conversation_id:${WATCHED_TWEET_ID} "singularityengine" -is:retweet`);
+    queries.push(`conversation_id:${WATCHED_TWEET_ID} "metatransformr" -is:retweet`);
   }
 
   // Direct @mentions with the keyword
-  queries.push(`@${OWNER_USERNAME} "singularityengine" -is:retweet`);
+  queries.push(`@${OWNER_USERNAME} "metatransformr" -is:retweet`);
 
   const allTweets = [];
   const seenIds = new Set();
@@ -187,10 +187,10 @@ export async function handler() {
       continue;
     }
 
-    // Must contain "singularityengine <request>" keyword
+    // Must contain "metatransformr <request>" keyword
     const buildRequest = extractBuildRequest(reply.text, reply);
     if (!buildRequest) {
-      console.log(`⏭️ No "singularityengine" keyword from @${reply.username}: "${reply.text.slice(0, 60)}"`);
+      console.log(`⏭️ No "metatransformr" keyword from @${reply.username}: "${reply.text.slice(0, 60)}"`);
       continue;
     }
 

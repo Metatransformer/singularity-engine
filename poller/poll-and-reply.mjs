@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Singularity Reply Poller
+ * Metatransformr Reply Poller
  * Polls DynamoDB _reply_queue, replies via OpenClaw browser tool (CDP on :18800).
  * No relay server, no inbound connections. Just outbound HTTPS.
  *
@@ -14,7 +14,7 @@ import { fileURLToPath } from "url";
 import { postReply as xApiPostReply, loadCredentialsFromEnv } from "../shared/x-api-client.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const API = process.env.SINGULARITY_DB_URL || "https://your-api-gateway.execute-api.us-east-1.amazonaws.com/api/data";
+const API = process.env.METATRANSFORMR_DB_URL || "https://your-api-gateway.execute-api.us-east-1.amazonaws.com/api/data";
 const INTERVAL_MS = parseInt(process.argv.find((_, i, a) => a[i - 1] === "--interval") || "45") * 1000;
 const ONCE = process.argv.includes("--once");
 const REPLY_MODE = process.env.REPLY_MODE || "openclaw";
@@ -75,7 +75,7 @@ async function markDone(queueKey) {
 
 async function replyViaXApi(item) {
   const { tweetId, username, appUrl, request } = item;
-  const replyText = item.replyText || `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by SingularityEngine 🦀\nhttps://github.com/Metatransformer/singularity-engine`;
+  const replyText = item.replyText || `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by Metatransformr 🦀\nhttps://github.com/Metatransformer/metatransformr`;
   console.log(`  🐦 [x-api] Replying to @${username} (tweet ${tweetId})`);
 
   const creds = loadCredentialsFromEnv();
@@ -98,7 +98,7 @@ async function replyViaCDP(item) {
   const { tweetId, username, appUrl, request } = item;
   const ownerUsername = process.env.OWNER_USERNAME || "your_x_username";
   const tweetUrl = `https://x.com/${ownerUsername}/status/${tweetId}`;
-  const replyText = item.replyText || `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by SingularityEngine 🦀\nhttps://github.com/Metatransformer/singularity-engine`;
+  const replyText = item.replyText || `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by Metatransformr 🦀\nhttps://github.com/Metatransformer/metatransformr`;
 
   console.log(`  🐦 Replying to @${username} → ${tweetUrl}`);
 
@@ -190,7 +190,7 @@ async function processPendingFiles() {
 }
 
 // Main
-console.log(`🚀 Singularity Reply Poller`);
+console.log(`🚀 Metatransformr Reply Poller`);
 console.log(`   API: ${API}`);
 console.log(`   Interval: ${INTERVAL_MS / 1000}s`);
 console.log(`   Mode: ${ONCE ? "once" : "continuous"}`);
