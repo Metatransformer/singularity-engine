@@ -6,7 +6,7 @@
 Tweet → Sanitize → Claude → Scan → Deploy → Reply
 ```
 
-Metatransformr OS is a serverless pipeline that converts tweets into live web applications. The entire system runs on AWS Lambda with GitHub Pages for hosting generated apps.
+Singularity Engine is a serverless pipeline that converts tweets into live web applications. The entire system runs on AWS Lambda with GitHub Pages for hosting generated apps.
 
 ## Components
 
@@ -14,11 +14,11 @@ Metatransformr OS is a serverless pipeline that converts tweets into live web ap
 **Runtime:** AWS Lambda, triggered by EventBridge every 2 minutes
 
 **What it does:**
-1. Queries X API for tweets containing "metatransformr" that are either:
+1. Queries X API for tweets containing "singularityengine" that are either:
    - Replies to a watched thread (`WATCHED_TWEET_ID`)
    - @mentions of the owner
 2. Filters out self-replies, already-built tweets, and rate-limited users
-3. Extracts the build request (everything after "metatransformr")
+3. Extracts the build request (everything after "singularityengine")
 4. Sanitizes input through injection detection and content filtering
 5. Invokes the Code Runner Lambda with the sanitized request
 6. Invokes the Deployer Lambda with the generated HTML
@@ -32,7 +32,7 @@ Metatransformr OS is a serverless pipeline that converts tweets into live web ap
 1. Receives a sanitized build request + app ID
 2. Sends a carefully crafted prompt to Claude (Sonnet) with:
    - System prompt defining strict rules (single HTML file, no external deps, etc.)
-   - MetatransformrDB client code for persistence
+   - SingularityDB client code for persistence
    - The user's request
 3. Extracts HTML from Claude's response
 4. Injects a Content-Security-Policy meta tag
@@ -72,7 +72,7 @@ Metatransformr OS is a serverless pipeline that converts tweets into live web ap
 **What it does:**
 - Provides a public REST API for:
   - Querying deployed builds (paginated, sorted by coolness)
-  - Key-value storage for generated apps (MetatransformrDB)
+  - Key-value storage for generated apps (SingularityDB)
 - Protects system namespaces from public writes
 - Enables embedding a build gallery on any website
 
@@ -102,17 +102,17 @@ Single table design with `ns` (namespace) partition key and `key` sort key.
 | `_builds` | Build log | `{appId, tweetId, username, request, appUrl, htmlSize}` |
 | `_showcase` | Public gallery | `{name, score, query, username, tweet_url, build_url}` |
 | `_reply_queue` | Pending replies | `{tweetId, username, appUrl, replyText, status}` |
-| `<app-id>` | App data (MetatransformrDB) | User-defined key-value pairs |
+| `<app-id>` | App data (SingularityDB) | User-defined key-value pairs |
 
 ## Generated App Model
 
 Every generated app is:
 - A **single HTML file** with inline CSS and JavaScript
 - Hosted on **GitHub Pages** (static, no server)
-- Restricted by **Content Security Policy** to only connect to the MetatransformrDB API
-- Given a **unique namespace** in MetatransformrDB for persistence
+- Restricted by **Content Security Policy** to only connect to the SingularityDB API
+- Given a **unique namespace** in SingularityDB for persistence
 
-Apps can read/write data through the MetatransformrDB client class, which is included in every generated app by Claude.
+Apps can read/write data through the SingularityDB client class, which is included in every generated app by Claude.
 
 ## Cost Structure
 

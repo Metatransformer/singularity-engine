@@ -1,8 +1,8 @@
-# 🦀 Metatransformr OS
+# 🦀 Singularity Engine
 
 **Autonomous tweet-to-app pipeline.** Tweet a request → AI builds it → deploys live → replies with link.
 
-> "Metatransformr build me a todo app" → 45 seconds later → live app + reply
+> "SingularityEngine build me a todo app" → 45 seconds later → live app + reply
 
 ## How People Use It
 
@@ -10,31 +10,31 @@ There are two ways to trigger a build:
 
 1. **Reply to your thread** — You post a thread on X, and people reply with:
    ```
-   Metatransformr build me a tetris game
+   SingularityEngine build me a tetris game
    ```
 
 2. **@mention you directly** — Anyone tweets:
    ```
-   @yourusername Metatransformr make a pomodoro timer
+   @yourusername SingularityEngine make a pomodoro timer
    ```
 
-The keyword `Metatransformr` (case-insensitive) is **required**. Without it, the bot ignores the tweet. Each user is rate-limited to 2 builds per hour.
+The keyword `SingularityEngine` (case-insensitive) is **required**. Without it, the bot ignores the tweet. Each user is rate-limited to 2 builds per hour.
 
 All replies include a link back to this repo so people can deploy their own.
 
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Metatransformer/metatransformr/main/bin/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Metatransformer/singularity-engine/main/bin/install.sh | bash
 ```
 
 Or manually:
 
 ```bash
-git clone https://github.com/Metatransformer/metatransformr.git
-cd metatransformr
+git clone https://github.com/Metatransformer/singularity-engine.git
+cd singularityengine
 npm install
-npm link  # or: sudo ln -sf $(pwd)/bin/cli.mjs /usr/local/bin/metatransformr
+npm link  # or: sudo ln -sf $(pwd)/bin/cli.mjs /usr/local/bin/singularityengine
 ```
 
 ## Dependencies
@@ -48,32 +48,32 @@ npm link  # or: sudo ln -sf $(pwd)/bin/cli.mjs /usr/local/bin/metatransformr
 | **X API Bearer Token** | Only for `x-api` mode | Reading tweets (openclaw mode uses browser instead) |
 | **X API OAuth 1.0a** | Only for `x-api` mode | Posting reply tweets |
 
-`metatransformr config` checks for all dependencies and offers to install missing ones.
+`singularityengine config` checks for all dependencies and offers to install missing ones.
 
 ## CLI Commands
 
 ```bash
-metatransformr config              # Interactive setup — auto-detects deps & credentials
-metatransformr deploy              # Deploy to AWS (Lambda, DynamoDB, EventBridge, API Gateway)
-metatransformr watch 1234567890    # Set the tweet to watch for replies
-metatransformr watch               # Show current watched tweet
-metatransformr status              # Infrastructure health, config, bot status
-metatransformr start               # Enable tweet polling
-metatransformr stop                # Disable tweet polling (keeps infra)
-metatransformr api                 # Show API spec for embedding builds
-metatransformr update              # Self-update from git
-metatransformr uninstall           # Full teardown — delete all AWS resources
+singularityengine config              # Interactive setup — auto-detects deps & credentials
+singularityengine deploy              # Deploy to AWS (Lambda, DynamoDB, EventBridge, API Gateway)
+singularityengine watch 1234567890    # Set the tweet to watch for replies
+singularityengine watch               # Show current watched tweet
+singularityengine status              # Infrastructure health, config, bot status
+singularityengine start               # Enable tweet polling
+singularityengine stop                # Disable tweet polling (keeps infra)
+singularityengine api                 # Show API spec for embedding builds
+singularityengine update              # Self-update from git
+singularityengine uninstall           # Full teardown — delete all AWS resources
 ```
 
 ### Deploy Options
 
 ```bash
-metatransformr deploy --dry-run   # Preview without making changes
+singularityengine deploy --dry-run   # Preview without making changes
 ```
 
 ## Setup Flow
 
-### What `metatransformr config` does
+### What `singularityengine config` does
 
 Config is a 4-step interactive process. It auto-detects as much as possible and only asks you for things it can't figure out on its own.
 
@@ -110,30 +110,30 @@ All keys are validated on entry.
 #### Step 3: Auto-Configure GitHub
 
 Uses the `gh` CLI to:
-1. Check if you already have a `metatransformr-builds` fork
-2. If not, offers to fork `Metatransformer/metatransformr-builds` for you
+1. Check if you already have a `singularity-builds` fork
+2. If not, offers to fork `Metatransformer/singularity-builds` for you
 3. Derives the GitHub Pages URL automatically
 
 ```
 🐙 GitHub Setup
-  Checking for metatransformr-builds fork...
-  ✅ Found: yourname/metatransformr-builds
-  ✅ GitHub Pages URL: https://yourname.github.io/metatransformr-builds
+  Checking for singularity-builds fork...
+  ✅ Found: yourname/singularity-builds
+  ✅ GitHub Pages URL: https://yourname.github.io/singularity-builds
 ```
 
 #### Step 4: Save and Summarize
 
 Everything auto-detected is saved to `.env`:
 - `AWS_REGION` → from `aws configure get region`
-- `TABLE_NAME` → `metatransformr-db` (default)
+- `TABLE_NAME` → `singularity-db` (default)
 - `GITHUB_TOKEN` → from `gh auth token`
 - `GITHUB_REPO` → detected from fork
 - `GITHUB_PAGES_URL` → derived from repo
 - `OWNER_USERNAME` → from X API `/2/users/me` or manual entry
 
 Things you DON'T configure here (set by other commands):
-- `METATRANSFORMR_DB_URL` → created by `metatransformr deploy`
-- `WATCHED_TWEET_ID` → set by `metatransformr watch <tweet_id>`
+- `SINGULARITY_DB_URL` → created by `singularityengine deploy`
+- `WATCHED_TWEET_ID` → set by `singularityengine watch <tweet_id>`
 
 ## Architecture
 
@@ -161,7 +161,7 @@ Things you DON'T configure here (set by other commands):
 ### Data Flow
 
 1. **Tweet Watcher** — polls X API for replies to a watched tweet, sanitizes input, rejects injections
-2. **Code Runner** — sends sanitized request to Claude, generates a single-file HTML app with MetatransformrDB for persistence
+2. **Code Runner** — sends sanitized request to Claude, generates a single-file HTML app with SingularityDB for persistence
 3. **Deployer** — pushes HTML to GitHub Pages, logs build to DynamoDB, queues reply
 4. **Reply Poller** — local process polls DynamoDB reply queue, sends tweet replies via OpenClaw browser automation or X API v2
 
@@ -176,26 +176,26 @@ Things you DON'T configure here (set by other commands):
 
 ```bash
 # 1. Install
-curl -fsSL https://raw.githubusercontent.com/Metatransformer/metatransformr/main/bin/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Metatransformer/singularity-engine/main/bin/install.sh | bash
 
 # 2. Configure (auto-detects deps + credentials)
-metatransformr config
+singularityengine config
 
 # 3. Deploy
-metatransformr deploy
+singularityengine deploy
 
 # 4. Set the tweet to watch
-metatransformr watch 1234567890
+singularityengine watch 1234567890
 
 # 5. Verify
-metatransformr status
+singularityengine status
 
 # 6. Tweet a build request!
 ```
 
 ## Security
 
-Metatransformr OS takes untrusted input from public tweets and generates code. Security is multi-layered:
+Singularity Engine takes untrusted input from public tweets and generates code. Security is multi-layered:
 
 ### 🔒 Environment Variable Isolation
 - **Env vars (API keys, tokens) stay in AWS Lambda** — they are never passed to Claude as context and never appear in generated code
@@ -213,11 +213,11 @@ Generated HTML is scanned for dangerous patterns before deployment:
 - `process.env`, `require()`, `eval()`, `Function()` — blocked
 - `WebSocket`, `EventSource`, `sendBeacon` — exfiltration channels blocked
 - `document.cookie`, `localStorage` — storage access blocked
-- Unauthorized `fetch()` targets — only MetatransformrDB API allowed
+- Unauthorized `fetch()` targets — only SingularityDB API allowed
 - Dynamic URL construction — flagged as potential exfiltration
 
 ### 🌐 Content Security Policy
-Every generated app gets a CSP meta tag injected that restricts `connect-src` to only the MetatransformrDB API. Even if malicious code slips past the scanner, the **browser blocks** unauthorized network requests.
+Every generated app gets a CSP meta tag injected that restricts `connect-src` to only the SingularityDB API. Even if malicious code slips past the scanner, the **browser blocks** unauthorized network requests.
 
 ### ⏱️ Rate Limiting
 - 2 builds per user per hour
@@ -231,18 +231,18 @@ Every generated app gets a CSP meta tag injected that restricts `connect-src` to
 
 📖 **Full security architecture, threat model, and trust boundaries:** [docs/SECURITY.md](docs/SECURITY.md)
 
-## What `metatransformr deploy` Creates
+## What `singularityengine deploy` Creates
 
 | Resource | Name | Purpose |
 |----------|------|---------|
-| DynamoDB Table | `metatransformr-db` | Stores builds, replies, app data |
-| IAM Role | `metatransformr-role` | Lambda execution permissions |
-| Lambda | `metatransformr-tweet-watcher` | Polls X every 2 min |
-| Lambda | `metatransformr-code-runner` | Claude generates apps |
-| Lambda | `metatransformr-deployer` | Pushes to GitHub Pages |
-| Lambda | `metatransformr-db-api` | Public REST API |
-| EventBridge | `metatransformr-tweet-poll` | Triggers watcher every 2 min |
-| API Gateway | `metatransformr-db-api` | HTTP API for MetatransformrDB |
+| DynamoDB Table | `singularity-db` | Stores builds, replies, app data |
+| IAM Role | `singularity-engine-role` | Lambda execution permissions |
+| Lambda | `singularity-tweet-watcher` | Polls X every 2 min |
+| Lambda | `singularity-code-runner` | Claude generates apps |
+| Lambda | `singularity-deployer` | Pushes to GitHub Pages |
+| Lambda | `singularity-db-api` | Public REST API |
+| EventBridge | `singularity-tweet-poll` | Triggers watcher every 2 min |
+| API Gateway | `singularity-db-api` | HTTP API for SingularityDB |
 
 ## Troubleshooting
 
@@ -253,8 +253,8 @@ Every generated app gets a CSP meta tag injected that restricts `connect-src` to
 | X API 429 | Rate limited — wait and retry |
 | GitHub 404 | Check repo exists and PAT has `repo` scope |
 | Lambda timeout | Code-runner default is 120s; increase if needed |
-| "No new replies" but tweets exist | Verify `WATCHED_TWEET_ID` and keyword "metatransformr" |
-| EventBridge not triggering | Run `metatransformr start` |
+| "No new replies" but tweets exist | Verify `WATCHED_TWEET_ID` and keyword "singularityengine" |
+| EventBridge not triggering | Run `singularityengine start` |
 
 ## Components
 

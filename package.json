@@ -1,10 +1,10 @@
 {
-  "name": "metatransformr",
+  "name": "singularity-engine",
   "version": "1.0.0",
   "type": "module",
   "description": "Autonomous tweet-to-app pipeline. Tweet a request → AI builds it → deploys live → replies with link.",
   "bin": {
-    "metatransformr": "./bin/cli.mjs"
+    "singularityengine": "./bin/cli.mjs"
   },
   "scripts": {
     "setup": "node bin/cli.mjs config",
@@ -27,6 +27,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Metatransformer/metatransformr.git"
+    "url": "https://github.com/Metatransformer/singularity-engine.git"
   }
 }

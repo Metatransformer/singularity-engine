@@ -8,11 +8,11 @@ fi
 
 # Configuration (from env or defaults)
 REGION="${AWS_REGION:-us-east-1}"
-TABLE_NAME="${TABLE_NAME:-metatransformr-db}"
-ROLE_NAME="${ROLE_NAME:-metatransformr-role}"
-CODE_RUNNER_FN="${CODE_RUNNER_FN:-metatransformr-code-runner}"
-DEPLOYER_FN="${DEPLOYER_FN:-metatransformr-deployer}"
-WATCHER_FN="${WATCHER_FN:-metatransformr-tweet-watcher}"
+TABLE_NAME="${TABLE_NAME:-singularity-db}"
+ROLE_NAME="${ROLE_NAME:-singularity-engine-role}"
+CODE_RUNNER_FN="${CODE_RUNNER_FN:-singularity-code-runner}"
+DEPLOYER_FN="${DEPLOYER_FN:-singularity-deployer}"
+WATCHER_FN="${WATCHER_FN:-singularity-tweet-watcher}"
 DRY_RUN=false
 
 # Parse args
@@ -21,7 +21,7 @@ for arg in "$@"; do
     --dry-run) DRY_RUN=true ;;
     --region=*) REGION="${arg#*=}" ;;
     --table=*) TABLE_NAME="${arg#*=}" ;;
-    --help) echo "Usage: ./deploy-aws.sh [--dry-run] [--region=us-east-1] [--table=metatransformr-db]"; exit 0 ;;
+    --help) echo "Usage: ./deploy-aws.sh [--dry-run] [--region=us-east-1] [--table=singularity-db]"; exit 0 ;;
   esac
 done
 
@@ -30,7 +30,7 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/nu
   exit 1
 }
 
-echo "🚀 Deploying Metatransformr OS to AWS..."
+echo "🚀 Deploying Singularity Engine to AWS..."
 echo "   Account: $ACCOUNT_ID"
 echo "   Region: $REGION"
 echo "   Table: $TABLE_NAME"
@@ -79,14 +79,14 @@ if ! $DRY_RUN; then
       {
         "Effect": "Allow",
         "Action": ["lambda:InvokeFunction"],
-        "Resource": "arn:aws:lambda:'$REGION':'$ACCOUNT_ID':function:metatransformr-*"
+        "Resource": "arn:aws:lambda:'$REGION':'$ACCOUNT_ID':function:singularity-*"
       }
     ]
   }'
 
   aws iam put-role-policy \
     --role-name "$ROLE_NAME" \
-    --policy-name "metatransformr-policy" \
+    --policy-name "singularity-engine-policy" \
     --policy-document "$POLICY"
 
   echo "   ✅ IAM configured"
@@ -164,16 +164,16 @@ deploy_lambda "$CODE_RUNNER_FN" "aws/code-runner/run.mjs" "true" "aws/code-runne
 # 3. Deploy Deployer (needs its own package.json)
 TMPDIR_DEPLOYER=$(mktemp -d)
 cat > "$TMPDIR_DEPLOYER/package.json" << 'PKGJSON'
-{"name":"metatransformr-deployer","version":"1.0.0","type":"module","dependencies":{"@aws-sdk/client-dynamodb":"^3.0.0","@aws-sdk/lib-dynamodb":"^3.0.0"}}
+{"name":"singularity-deployer","version":"1.0.0","type":"module","dependencies":{"@aws-sdk/client-dynamodb":"^3.0.0","@aws-sdk/lib-dynamodb":"^3.0.0"}}
 PKGJSON
 deploy_lambda "$DEPLOYER_FN" "aws/deployer/index.mjs" "false" "$TMPDIR_DEPLOYER/package.json" \
-  "TABLE_NAME=$TABLE_NAME,GITHUB_REPO=${GITHUB_REPO:-your-org/metatransformr-builds}" 30 256
+  "TABLE_NAME=$TABLE_NAME,GITHUB_REPO=${GITHUB_REPO:-your-org/singularity-builds}" 30 256
 rm -rf "$TMPDIR_DEPLOYER"
 
 # 4. Deploy Tweet Watcher
 TMPDIR_WATCHER=$(mktemp -d)
 cat > "$TMPDIR_WATCHER/package.json" << 'PKGJSON'
-{"name":"metatransformr-watcher","version":"1.0.0","type":"module","dependencies":{"@aws-sdk/client-dynamodb":"^3.0.0","@aws-sdk/lib-dynamodb":"^3.0.0","@aws-sdk/client-lambda":"^3.0.0"}}
+{"name":"singularity-watcher","version":"1.0.0","type":"module","dependencies":{"@aws-sdk/client-dynamodb":"^3.0.0","@aws-sdk/lib-dynamodb":"^3.0.0","@aws-sdk/client-lambda":"^3.0.0"}}
 PKGJSON
 deploy_lambda "$WATCHER_FN" "aws/tweet-watcher/index.mjs" "true" "$TMPDIR_WATCHER/package.json" \
   "TABLE_NAME=$TABLE_NAME,CODE_RUNNER_FUNCTION=$CODE_RUNNER_FN,DEPLOYER_FUNCTION=$DEPLOYER_FN" 300 256
@@ -185,7 +185,7 @@ echo "⏰ Setting up EventBridge schedule..."
 
 if ! $DRY_RUN; then
   RULE_ARN=$(aws events put-rule \
-    --name "metatransformr-tweet-poll" \
+    --name "singularity-tweet-poll" \
     --schedule-expression "rate(2 minutes)" \
     --region "$REGION" \
     --query 'RuleArn' --output text)
@@ -193,8 +193,8 @@ if ! $DRY_RUN; then
   WATCHER_ARN=$(aws lambda get-function --function-name "$WATCHER_FN" --query 'Configuration.FunctionArn' --output text --region "$REGION")
 
   aws events put-targets \
-    --rule "metatransformr-tweet-poll" \
-    --targets "Id=metatransformr-watcher,Arn=$WATCHER_ARN" \
+    --rule "singularity-tweet-poll" \
+    --targets "Id=singularity-watcher,Arn=$WATCHER_ARN" \
     --region "$REGION" > /dev/null
 
   aws lambda add-permission \
@@ -205,14 +205,14 @@ if ! $DRY_RUN; then
     --source-arn "$RULE_ARN" \
     --region "$REGION" 2>/dev/null || true
 else
-  echo "   [dry-run] Would create EventBridge rule: metatransformr-tweet-poll (rate 2 min)"
+  echo "   [dry-run] Would create EventBridge rule: singularity-tweet-poll (rate 2 min)"
 fi
 
 echo "   ✅ Tweet watcher runs every 2 minutes"
 
 echo ""
 echo "============================================"
-echo "🎉 Metatransformr OS deployed!"
+echo "🎉 Singularity Engine deployed!"
 echo "============================================"
 echo ""
 echo "Lambdas:"
@@ -222,7 +222,7 @@ echo "  - $DEPLOYER_FN (pushes to GitHub Pages)"
 echo ""
 echo "⚠️  Configure Lambda env vars (if not already set):"
 echo "  aws lambda update-function-configuration --function-name $CODE_RUNNER_FN \\"
-echo "    --environment 'Variables={TABLE_NAME=$TABLE_NAME,ANTHROPIC_API_KEY=\$ANTHROPIC_API_KEY,METATRANSFORMR_DB_URL=\$METATRANSFORMR_DB_URL}'"
+echo "    --environment 'Variables={TABLE_NAME=$TABLE_NAME,ANTHROPIC_API_KEY=\$ANTHROPIC_API_KEY,SINGULARITY_DB_URL=\$SINGULARITY_DB_URL}'"
 echo ""
 echo "  aws lambda update-function-configuration --function-name $DEPLOYER_FN \\"
 echo "    --environment 'Variables={TABLE_NAME=$TABLE_NAME,GITHUB_REPO=\$GITHUB_REPO,GITHUB_TOKEN=\$GITHUB_TOKEN,GITHUB_PAGES_URL=\$GITHUB_PAGES_URL}'"

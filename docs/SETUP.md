@@ -82,8 +82,8 @@ You need a **Twitter Developer account** with a project and app.
 ### 4. GitHub Setup
 
 1. **Create a builds repo:**
-   - Fork [Metatransformer/metatransformr-builds](https://github.com/Metatransformer/metatransformr-builds)
-   - Or create a new empty repo (e.g., `your-org/metatransformr-builds`)
+   - Fork [Metatransformer/singularity-builds](https://github.com/Metatransformer/singularity-builds)
+   - Or create a new empty repo (e.g., `your-org/singularity-builds`)
 
 2. **Enable GitHub Pages:**
    - Go to repo → Settings → Pages
@@ -103,12 +103,12 @@ You need a **Twitter Developer account** with a project and app.
 2. Create an API key
 3. Add billing (Claude API calls cost ~$0.05-0.10 per build)
 
-## Configuration (`metatransformr config`)
+## Configuration (`singularityengine config`)
 
 The config command walks you through setting up all credentials interactively.
 
 ```bash
-metatransformr config
+singularityengine config
 ```
 
 ### What It Asks (Step by Step)
@@ -118,19 +118,19 @@ metatransformr config
 |--------|--------------|
 | Bearer token | Your X API Bearer Token (starts with `AAAA...`) |
 | Tweet ID to watch | The numeric ID of the tweet to monitor for replies (from the URL) |
-| Your X username | Your handle without @ (e.g., `metatransformr`) |
+| Your X username | Your handle without @ (e.g., `singularityengine`) |
 
 #### ☁️ AWS
 | Prompt | What to Enter |
 |--------|--------------|
 | Region | AWS region (default: `us-east-1`) |
-| DynamoDB table name | Name for the data table (default: `metatransformr-db`) |
+| DynamoDB table name | Name for the data table (default: `singularity-db`) |
 
 #### 🐙 GitHub
 | Prompt | What to Enter |
 |--------|--------------|
 | Personal access token | Your GitHub PAT with `repo` scope |
-| Builds repo | `org/repo-name` (e.g., `Metatransformer/metatransformr-builds`) |
+| Builds repo | `org/repo-name` (e.g., `Metatransformer/singularity-builds`) |
 | GitHub Pages URL | Auto-calculated from repo name |
 
 #### 🤖 Anthropic
@@ -138,7 +138,7 @@ metatransformr config
 |--------|--------------|
 | API key | Your Anthropic API key (starts with `sk-ant-...`) |
 
-#### 🗄️ MetatransformrDB
+#### 🗄️ SingularityDB
 | Prompt | What to Enter |
 |--------|--------------|
 | API Gateway URL | Leave blank — this gets set automatically after `deploy` |
@@ -152,35 +152,35 @@ If you chose `x-api`, you'll also be asked for OAuth 1.0a credentials (Consumer 
 
 After entering everything, the CLI validates your tokens against the actual APIs and writes a `.env` file.
 
-## Deployment (`metatransformr deploy`)
+## Deployment (`singularityengine deploy`)
 
 ```bash
-metatransformr deploy
+singularityengine deploy
 # or preview first:
-metatransformr deploy --dry-run
+singularityengine deploy --dry-run
 ```
 
 ### What It Creates
 
-1. **DynamoDB Table** (`metatransformr-db`)
+1. **DynamoDB Table** (`singularity-db`)
    - Partition key: `ns` (namespace)
    - Sort key: `key`
    - Pay-per-request billing
 
-2. **IAM Role** (`metatransformr-role`)
+2. **IAM Role** (`singularity-engine-role`)
    - Trusted by Lambda service
    - Permissions: DynamoDB read/write, Lambda invoke, CloudWatch Logs
 
 3. **Lambda Functions:**
-   - `metatransformr-tweet-watcher` (256MB, 5min timeout) — polls X API
-   - `metatransformr-code-runner` (512MB, 2min timeout) — generates apps via Claude
-   - `metatransformr-deployer` (256MB, 30s timeout) — pushes to GitHub Pages
-   - `metatransformr-db-api` (256MB, 10s timeout) — public REST API
+   - `singularity-tweet-watcher` (256MB, 5min timeout) — polls X API
+   - `singularity-code-runner` (512MB, 2min timeout) — generates apps via Claude
+   - `singularity-deployer` (256MB, 30s timeout) — pushes to GitHub Pages
+   - `singularity-db-api` (256MB, 10s timeout) — public REST API
 
-4. **EventBridge Rule** (`metatransformr-tweet-poll`)
+4. **EventBridge Rule** (`singularity-tweet-poll`)
    - Triggers tweet-watcher every 2 minutes
 
-5. **API Gateway** (`metatransformr-db-api`)
+5. **API Gateway** (`singularity-db-api`)
    - HTTP API with CORS enabled
    - Routes all `/api/*` requests to the db-api Lambda
    - Auto-deploy stage
@@ -190,7 +190,7 @@ The deploy command automatically updates your `.env` with the API Gateway URL.
 ## Post-Deploy Verification
 
 ```bash
-metatransformr status
+singularityengine status
 ```
 
 This checks:
@@ -236,13 +236,13 @@ The file already exists at that path. This happens if you rebuild the same app I
 The code-runner has a 120s timeout. If Claude takes too long, increase it in the Lambda console or redeploy.
 
 ### "No new replies" but tweets exist
-Check that `WATCHED_TWEET_ID` is correct and that tweets contain the keyword "metatransformr" (case-insensitive).
+Check that `WATCHED_TWEET_ID` is correct and that tweets contain the keyword "singularityengine" (case-insensitive).
 
 ### EventBridge not triggering
-Run `metatransformr start` to ensure the rule is enabled. Check CloudWatch Logs for the tweet-watcher Lambda for errors.
+Run `singularityengine start` to ensure the rule is enabled. Check CloudWatch Logs for the tweet-watcher Lambda for errors.
 
 ### Reply poller can't connect to DynamoDB
-Make sure `METATRANSFORMR_DB_URL` in your `.env` is set (it should be after `deploy`). Test with:
+Make sure `SINGULARITY_DB_URL` in your `.env` is set (it should be after `deploy`). Test with:
 ```bash
-curl "$(grep METATRANSFORMR_DB_URL .env | cut -d= -f2-)/_showcase"
+curl "$(grep SINGULARITY_DB_URL .env | cut -d= -f2-)/_showcase"
 ```

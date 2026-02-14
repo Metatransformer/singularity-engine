@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Metatransformr OS CLI
- * Usage: metatransformr <command> [options]
+ * Singularity Engine CLI
+ * Usage: singularityengine <command> [options]
  */
 
 import { createInterface } from "readline";
@@ -36,13 +36,13 @@ const REPO_ROOT = resolve(__dirname, "..");
 function ensureRepo() {
   const pkgPath = join(REPO_ROOT, "package.json");
   if (!existsSync(pkgPath)) {
-    err("Cannot find metatransformr repo. Run from within the repo or reinstall.");
+    err("Cannot find singularity-engine repo. Run from within the repo or reinstall.");
     process.exit(1);
   }
   try {
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-    if (pkg.name !== "metatransformr") {
-      err("This doesn't look like the metatransformr repo.");
+    if (pkg.name !== "singularity-engine") {
+      err("This doesn't look like the singularity-engine repo.");
       process.exit(1);
     }
   } catch {
@@ -124,12 +124,12 @@ function getAwsClients(env) {
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const ROLE_NAME = "metatransformr-role";
-const CODE_RUNNER_FN = "metatransformr-code-runner";
-const DEPLOYER_FN = "metatransformr-deployer";
-const WATCHER_FN = "metatransformr-tweet-watcher";
-const DB_API_FN = "metatransformr-db-api";
-const EVENTBRIDGE_RULE = "metatransformr-tweet-poll";
+const ROLE_NAME = "singularity-engine-role";
+const CODE_RUNNER_FN = "singularity-code-runner";
+const DEPLOYER_FN = "singularity-deployer";
+const WATCHER_FN = "singularity-tweet-watcher";
+const DB_API_FN = "singularity-db-api";
+const EVENTBRIDGE_RULE = "singularity-tweet-poll";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // COMMANDS
@@ -163,7 +163,7 @@ async function cmdConfig() {
   const { rl, ask, confirm } = createPrompt();
   const os = detectOS();
 
-  console.log(`\n${c.bold}🦀 Metatransformr OS — Setup${c.reset}\n`);
+  console.log(`\n${c.bold}🦀 Singularity Engine — Setup${c.reset}\n`);
 
   const existing = loadEnv();
   const config = { ...existing };
@@ -272,8 +272,8 @@ async function cmdConfig() {
   // ═══ Step 2: Reply Mode + API Keys ═══
   const PLACEHOLDERS = new Set([
     "your_x_bearer_token", "your_tweet_id", "your_x_username",
-    "your_github_token", "your-org/metatransformr-builds",
-    "https://your-org.github.io/metatransformr-builds",
+    "your_github_token", "your-org/singularity-builds",
+    "https://your-org.github.io/singularity-builds",
     "your_anthropic_api_key",
     "https://your-api-gateway.execute-api.us-east-1.amazonaws.com/api/data",
     "your_consumer_key", "your_consumer_secret",
@@ -379,30 +379,30 @@ async function cmdConfig() {
   const ghUser = tryExec("gh api /user -q .login");
 
   if (ghUser) {
-    console.log(`  Checking for metatransformr-builds fork...`);
-    const forkCheck = tryExec(`gh api repos/${ghUser}/metatransformr-builds -q .full_name 2>/dev/null`);
+    console.log(`  Checking for singularity-builds fork...`);
+    const forkCheck = tryExec(`gh api repos/${ghUser}/singularity-builds -q .full_name 2>/dev/null`);
     if (forkCheck) {
       console.log(`  ${c.green}✅${c.reset} Found: ${forkCheck}`);
       config.GITHUB_REPO = forkCheck;
     } else {
       console.log(`  ${c.red}❌${c.reset} Not found.`);
-      const doFork = await confirm("  Fork Metatransformer/metatransformr-builds?", "Y");
+      const doFork = await confirm("  Fork Metatransformer/singularity-builds?", "Y");
       if (doFork) {
-        console.log(`  → gh repo fork Metatransformer/metatransformr-builds --clone=false`);
+        console.log(`  → gh repo fork Metatransformer/singularity-builds --clone=false`);
         try {
-          execSync("gh repo fork Metatransformer/metatransformr-builds --clone=false", { stdio: "pipe" });
-          config.GITHUB_REPO = `${ghUser}/metatransformr-builds`;
+          execSync("gh repo fork Metatransformer/singularity-builds --clone=false", { stdio: "pipe" });
+          config.GITHUB_REPO = `${ghUser}/singularity-builds`;
           ok(`Forked to ${config.GITHUB_REPO}`);
         } catch (e) {
           warn(`Fork failed: ${e.message}`);
-          config.GITHUB_REPO = config.GITHUB_REPO || `${ghUser}/metatransformr-builds`;
+          config.GITHUB_REPO = config.GITHUB_REPO || `${ghUser}/singularity-builds`;
         }
       } else {
-        config.GITHUB_REPO = isPlaceholder(config.GITHUB_REPO) ? `${ghUser}/metatransformr-builds` : config.GITHUB_REPO;
+        config.GITHUB_REPO = isPlaceholder(config.GITHUB_REPO) ? `${ghUser}/singularity-builds` : config.GITHUB_REPO;
       }
     }
   } else {
-    config.GITHUB_REPO = isPlaceholder(config.GITHUB_REPO) ? "Metatransformer/metatransformr-builds" : config.GITHUB_REPO;
+    config.GITHUB_REPO = isPlaceholder(config.GITHUB_REPO) ? "Metatransformer/singularity-builds" : config.GITHUB_REPO;
   }
 
   // Derive Pages URL
@@ -411,7 +411,7 @@ async function cmdConfig() {
   console.log(`  ${c.green}✅${c.reset} GitHub Pages URL: ${config.GITHUB_PAGES_URL}`);
 
   // Auto-set defaults
-  config.TABLE_NAME = config.TABLE_NAME || "metatransformr-db";
+  config.TABLE_NAME = config.TABLE_NAME || "singularity-db";
 
   // ═══ Step 4: Save and Summarize ═══
   saveEnv(config);
@@ -434,7 +434,7 @@ async function cmdConfig() {
   console.log(`  GitHub        ${config.GITHUB_REPO}`);
   console.log(`  Pages URL     ${config.GITHUB_PAGES_URL}`);
 
-  console.log(`\n${c.bold}Next:${c.reset} ${c.cyan}metatransformr deploy${c.reset}\n`);
+  console.log(`\n${c.bold}Next:${c.reset} ${c.cyan}singularityengine deploy${c.reset}\n`);
 
   rl.close();
 }
@@ -452,7 +452,7 @@ async function cmdWatch(args) {
     const isPlaceholder = (val) => !val || PLACEHOLDERS.has(val) || /^your[_-]/.test(val);
     if (isPlaceholder(current)) {
       info("No tweet currently being watched.");
-      console.log(`  Usage: ${c.cyan}metatransformr watch <tweet_id>${c.reset}\n`);
+      console.log(`  Usage: ${c.cyan}singularityengine watch <tweet_id>${c.reset}\n`);
       return;
     }
     console.log(`\n  Currently watching tweet ${c.bold}${current}${c.reset}`);
@@ -516,9 +516,9 @@ async function cmdDeploy(args) {
   const dryRun = args.includes("--dry-run");
   const env = loadEnv();
   const region = env.AWS_REGION || "us-east-1";
-  const tableName = env.TABLE_NAME || "metatransformr-db";
+  const tableName = env.TABLE_NAME || "singularity-db";
 
-  console.log(`\n${c.bold}🚀 Deploying Metatransformr OS to AWS${c.reset}\n`);
+  console.log(`\n${c.bold}🚀 Deploying Singularity Engine to AWS${c.reset}\n`);
 
   // Get account ID
   let accountId;
@@ -628,7 +628,7 @@ async function cmdDeploy(args) {
         }));
         await iam.send(new PutRolePolicyCommand({
           RoleName: ROLE_NAME,
-          PolicyName: "metatransformr-policy",
+          PolicyName: "singularity-engine-policy",
           PolicyDocument: JSON.stringify({
             Version: "2012-10-17",
             Statement: [
@@ -640,7 +640,7 @@ async function cmdDeploy(args) {
               {
                 Effect: "Allow",
                 Action: ["lambda:InvokeFunction"],
-                Resource: `arn:aws:lambda:${region}:${accountId}:function:metatransformr-*`,
+                Resource: `arn:aws:lambda:${region}:${accountId}:function:singularity-*`,
               },
             ],
           }),
@@ -733,7 +733,7 @@ async function cmdDeploy(args) {
   if (!dryRun) {
     await deployLambda(CODE_RUNNER_FN, "aws/code-runner/run.mjs", true,
       { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0", "@andersmyrmel/vard": "^1.0.0", "@anthropic-ai/sdk": "^0.39.0" },
-      { TABLE_NAME: tableName, ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY || "", METATRANSFORMR_DB_URL: env.METATRANSFORMR_DB_URL || "" },
+      { TABLE_NAME: tableName, ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY || "", SINGULARITY_DB_URL: env.SINGULARITY_DB_URL || "" },
       120, 512);
 
     await deployLambda(DEPLOYER_FN, "aws/deployer/index.mjs", false,
@@ -777,7 +777,7 @@ async function cmdDeploy(args) {
 
       await eb.send(new PutTargetsCommand({
         Rule: EVENTBRIDGE_RULE,
-        Targets: [{ Id: "metatransformr-watcher", Arn: watcherArn }],
+        Targets: [{ Id: "singularity-watcher", Arn: watcherArn }],
       }));
 
       try {
@@ -794,7 +794,7 @@ async function cmdDeploy(args) {
     if (!dryRun) { err(e.message); }
   }
 
-  // 5. API Gateway (MetatransformrDB)
+  // 5. API Gateway (SingularityDB)
   step("\n🌐 API Gateway");
   try {
     const { ApiGatewayV2Client, GetApisCommand, CreateApiCommand, CreateRouteCommand, CreateIntegrationCommand, CreateStageCommand, GetStagesCommand } = await import("@aws-sdk/client-apigatewayv2");
@@ -803,11 +803,11 @@ async function cmdDeploy(args) {
     await run("Setting up API Gateway", async () => {
       // Check if API already exists
       const apis = await apigw.send(new GetApisCommand({}));
-      let api = apis.Items?.find((a) => a.Name === "metatransformr-db-api");
+      let api = apis.Items?.find((a) => a.Name === "singularity-db-api");
 
       if (!api) {
         const result = await apigw.send(new CreateApiCommand({
-          Name: "metatransformr-db-api",
+          Name: "singularity-db-api",
           ProtocolType: "HTTP",
           CorsConfiguration: {
             AllowOrigins: ["*"],
@@ -858,7 +858,7 @@ async function cmdDeploy(args) {
 
       // Update .env
       const currentEnv = loadEnv();
-      currentEnv.METATRANSFORMR_DB_URL = `${apiUrl}/api/data`;
+      currentEnv.SINGULARITY_DB_URL = `${apiUrl}/api/data`;
       saveEnv(currentEnv);
     });
   } catch (e) {
@@ -866,7 +866,7 @@ async function cmdDeploy(args) {
   }
 
   console.log(`\n${c.bold}${c.green}════════════════════════════════════════════${c.reset}`);
-  console.log(`${c.bold}${c.green}🎉 Metatransformr OS deployed!${c.reset}`);
+  console.log(`${c.bold}${c.green}🎉 Singularity Engine deployed!${c.reset}`);
   console.log(`${c.bold}${c.green}════════════════════════════════════════════${c.reset}\n`);
 
   console.log(`${c.bold}Lambdas:${c.reset}`);
@@ -876,8 +876,8 @@ async function cmdDeploy(args) {
   console.log(`  • ${DB_API_FN} (public builds API)\n`);
 
   console.log(`${c.bold}Next:${c.reset}`);
-  console.log(`  ${c.cyan}metatransformr status${c.reset}  — Verify deployment`);
-  console.log(`  ${c.cyan}metatransformr start${c.reset}   — Ensure polling is active`);
+  console.log(`  ${c.cyan}singularityengine status${c.reset}  — Verify deployment`);
+  console.log(`  ${c.cyan}singularityengine start${c.reset}   — Ensure polling is active`);
   console.log(`  Then tweet a build request! 🚀\n`);
 }
 
@@ -886,17 +886,17 @@ async function cmdStatus() {
   ensureRepo();
   const env = loadEnv();
   const region = env.AWS_REGION || "us-east-1";
-  const tableName = env.TABLE_NAME || "metatransformr-db";
+  const tableName = env.TABLE_NAME || "singularity-db";
 
-  console.log(`\n${c.bold}🦀 Metatransformr OS — Status${c.reset}\n`);
+  console.log(`\n${c.bold}🦀 Singularity Engine — Status${c.reset}\n`);
 
   // Config status
   step("📋 Configuration");
   // Placeholder values from .env.example that indicate unconfigured
   const PLACEHOLDERS = new Set([
     "your_x_bearer_token", "your_tweet_id", "your_x_username",
-    "your_github_token", "your-org/metatransformr-builds",
-    "https://your-org.github.io/metatransformr-builds",
+    "your_github_token", "your-org/singularity-builds",
+    "https://your-org.github.io/singularity-builds",
     "your_anthropic_api_key",
     "https://your-api-gateway.execute-api.us-east-1.amazonaws.com/api/data",
     "your_consumer_key", "your_consumer_secret",
@@ -907,7 +907,7 @@ async function cmdStatus() {
   const secrets = [
     "X_BEARER_TOKEN", "WATCHED_TWEET_ID", "OWNER_USERNAME",
     "AWS_REGION", "TABLE_NAME", "GITHUB_TOKEN", "GITHUB_REPO",
-    "GITHUB_PAGES_URL", "ANTHROPIC_API_KEY", "METATRANSFORMR_DB_URL", "REPLY_MODE",
+    "GITHUB_PAGES_URL", "ANTHROPIC_API_KEY", "SINGULARITY_DB_URL", "REPLY_MODE",
   ];
   for (const key of secrets) {
     const val = env[key];
@@ -986,7 +986,7 @@ async function cmdStatus() {
   if (env.REPLY_MODE === "x-api" && isPlaceholder(env.X_BEARER_TOKEN)) warnings.push("X Bearer Token not configured — tweet watching won't work");
   if (isPlaceholder(env.ANTHROPIC_API_KEY)) warnings.push("Anthropic API key not configured — code generation won't work");
   if (isPlaceholder(env.GITHUB_TOKEN)) warnings.push("GitHub token not configured — deployment won't work");
-  if (isPlaceholder(env.METATRANSFORMR_DB_URL)) warnings.push("MetatransformrDB URL not configured — run deploy first");
+  if (isPlaceholder(env.SINGULARITY_DB_URL)) warnings.push("SingularityDB URL not configured — run deploy first");
 
   if (warnings.length > 0) {
     console.log(`\n${c.yellow}⚠️  Warnings:${c.reset}`);
@@ -1003,15 +1003,15 @@ async function cmdStop() {
   const env = loadEnv();
   const region = env.AWS_REGION || "us-east-1";
 
-  console.log(`\n${c.bold}⏹️  Stopping Metatransformr OS...${c.reset}\n`);
+  console.log(`\n${c.bold}⏹️  Stopping Singularity Engine...${c.reset}\n`);
 
   try {
     const { EventBridgeClient, DisableRuleCommand } = await import("@aws-sdk/client-eventbridge");
     const eb = new EventBridgeClient({ region });
     await eb.send(new DisableRuleCommand({ Name: EVENTBRIDGE_RULE }));
     ok("EventBridge rule disabled. Tweet polling stopped.");
-    info("Infrastructure is still deployed. Use 'metatransformr start' to resume.");
-    info("Use 'metatransformr uninstall' to tear down everything.\n");
+    info("Infrastructure is still deployed. Use 'singularityengine start' to resume.");
+    info("Use 'singularityengine uninstall' to tear down everything.\n");
   } catch (e) {
     err(`Failed to stop: ${e.message}`);
   }
@@ -1023,7 +1023,7 @@ async function cmdStart() {
   const env = loadEnv();
   const region = env.AWS_REGION || "us-east-1";
 
-  console.log(`\n${c.bold}▶️  Starting Metatransformr OS...${c.reset}\n`);
+  console.log(`\n${c.bold}▶️  Starting Singularity Engine...${c.reset}\n`);
 
   try {
     const { EventBridgeClient, EnableRuleCommand } = await import("@aws-sdk/client-eventbridge");
@@ -1033,7 +1033,7 @@ async function cmdStart() {
     info("The bot will check for new tweets every 2 minutes.\n");
   } catch (e) {
     err(`Failed to start: ${e.message}`);
-    info("Have you deployed yet? Run 'metatransformr deploy' first.\n");
+    info("Have you deployed yet? Run 'singularityengine deploy' first.\n");
   }
 }
 
@@ -1043,9 +1043,9 @@ async function cmdUninstall() {
   const { rl, ask, confirm } = createPrompt();
   const env = loadEnv();
   const region = env.AWS_REGION || "us-east-1";
-  const tableName = env.TABLE_NAME || "metatransformr-db";
+  const tableName = env.TABLE_NAME || "singularity-db";
 
-  console.log(`\n${c.bold}${c.red}🗑️  Metatransformr OS — Full Teardown${c.reset}\n`);
+  console.log(`\n${c.bold}${c.red}🗑️  Singularity Engine — Full Teardown${c.reset}\n`);
   warn("This will delete all AWS infrastructure.\n");
 
   if (!(await confirm("Are you sure you want to continue?"))) {
@@ -1059,7 +1059,7 @@ async function cmdUninstall() {
     try {
       const { EventBridgeClient, RemoveTargetsCommand, DeleteRuleCommand } = await import("@aws-sdk/client-eventbridge");
       const eb = new EventBridgeClient({ region });
-      await eb.send(new RemoveTargetsCommand({ Rule: EVENTBRIDGE_RULE, Ids: ["metatransformr-watcher"] }));
+      await eb.send(new RemoveTargetsCommand({ Rule: EVENTBRIDGE_RULE, Ids: ["singularity-watcher"] }));
       await eb.send(new DeleteRuleCommand({ Name: EVENTBRIDGE_RULE }));
       ok("EventBridge rule deleted");
     } catch (e) {
@@ -1087,7 +1087,7 @@ async function cmdUninstall() {
       const { ApiGatewayV2Client, GetApisCommand, DeleteApiCommand } = await import("@aws-sdk/client-apigatewayv2");
       const apigw = new ApiGatewayV2Client({ region });
       const apis = await apigw.send(new GetApisCommand({}));
-      const api = apis.Items?.find((a) => a.Name === "metatransformr-db-api");
+      const api = apis.Items?.find((a) => a.Name === "singularity-db-api");
       if (api) {
         await apigw.send(new DeleteApiCommand({ ApiId: api.ApiId }));
         ok("API Gateway deleted");
@@ -1104,7 +1104,7 @@ async function cmdUninstall() {
     try {
       const { IAMClient, DeleteRolePolicyCommand, DetachRolePolicyCommand, DeleteRoleCommand } = await import("@aws-sdk/client-iam");
       const iam = new IAMClient({ region });
-      try { await iam.send(new DeleteRolePolicyCommand({ RoleName: ROLE_NAME, PolicyName: "metatransformr-policy" })); } catch {}
+      try { await iam.send(new DeleteRolePolicyCommand({ RoleName: ROLE_NAME, PolicyName: "singularity-engine-policy" })); } catch {}
       try { await iam.send(new DetachRolePolicyCommand({ RoleName: ROLE_NAME, PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole" })); } catch {}
       await iam.send(new DeleteRoleCommand({ RoleName: ROLE_NAME }));
       ok("IAM role deleted");
@@ -1127,9 +1127,9 @@ async function cmdUninstall() {
   }
 
   // Remove symlink
-  if (await confirm("Remove /usr/local/bin/metatransformr symlink?")) {
+  if (await confirm("Remove /usr/local/bin/singularityengine symlink?")) {
     try {
-      execSync("rm -f /usr/local/bin/metatransformr");
+      execSync("rm -f /usr/local/bin/singularityengine");
       ok("Symlink removed");
     } catch (e) {
       warn(`Symlink: ${e.message}`);
@@ -1143,7 +1143,7 @@ async function cmdUninstall() {
 // ── update ───────────────────────────────────────────────────────────────────
 async function cmdUpdate() {
   ensureRepo();
-  console.log(`\n${c.bold}🔄 Updating Metatransformr OS...${c.reset}\n`);
+  console.log(`\n${c.bold}🔄 Updating Singularity Engine...${c.reset}\n`);
 
   try {
     step("📥 Pulling latest changes...");
@@ -1157,7 +1157,7 @@ async function cmdUpdate() {
     const cliPath = join(REPO_ROOT, "bin/cli.mjs");
     execSync(`chmod +x "${cliPath}"`);
     try {
-      execSync(`ln -sf "${cliPath}" /usr/local/bin/metatransformr`);
+      execSync(`ln -sf "${cliPath}" /usr/local/bin/singularityengine`);
       ok("Symlink updated");
     } catch {
       warn("Could not update symlink (try with sudo)");
@@ -1182,11 +1182,11 @@ async function cmdUpdate() {
 function cmdApi() {
   ensureRepo();
   const env = loadEnv();
-  const apiUrl = env.METATRANSFORMR_DB_URL || "https://<your-api-id>.execute-api.<region>.amazonaws.com";
+  const apiUrl = env.SINGULARITY_DB_URL || "https://<your-api-id>.execute-api.<region>.amazonaws.com";
   const baseUrl = apiUrl.replace(/\/api\/data\/?$/, "");
 
   console.log(`
-${c.bold}🌐 Metatransformr OS API${c.reset}
+${c.bold}🌐 Singularity Engine API${c.reset}
 
 Your API URL: ${c.cyan}${baseUrl}${c.reset}
 
@@ -1206,7 +1206,7 @@ ${c.green}GET${c.reset} ${baseUrl}/api/builds?page=1&per_page=10
         "query": "build me a tetris game",
         "username": "vibecoderjoe",
         "tweet_url": "https://x.com/vibecoderjoe/status/1234567890",
-        "build_url": "https://your-org.github.io/metatransformr-builds/apps/tetris-clone/"
+        "build_url": "https://your-org.github.io/singularity-builds/apps/tetris-clone/"
       }
     ],
     "total": 47,
@@ -1218,7 +1218,7 @@ ${c.green}GET${c.reset} ${baseUrl}/api/builds/:id
 
   Returns a single build by ID.
 
-${c.bold}━━━ Raw Key-Value API (MetatransformrDB) ━━━${c.reset}
+${c.bold}━━━ Raw Key-Value API (SingularityDB) ━━━${c.reset}
 
 ${c.green}GET${c.reset}  ${baseUrl}/api/data/:namespace/:key     — Read a value
 ${c.yellow}POST${c.reset} ${baseUrl}/api/data/:namespace/:key     — Write a value (JSON body)
@@ -1251,10 +1251,10 @@ ${c.bold}━━━ cURL Examples ━━━${c.reset}
 // ── help ─────────────────────────────────────────────────────────────────────
 function showHelp() {
   console.log(`
-${c.bold}🦀 Metatransformr OS${c.reset}
+${c.bold}🦀 Singularity Engine${c.reset}
 ${c.dim}Autonomous tweet-to-app pipeline${c.reset}
 
-${c.bold}Usage:${c.reset} metatransformr <command> [options]
+${c.bold}Usage:${c.reset} singularityengine <command> [options]
 
 ${c.bold}Commands:${c.reset}
   ${c.cyan}config${c.reset}      Interactive setup — auto-detects deps & credentials
@@ -1272,12 +1272,12 @@ ${c.bold}Options:${c.reset}
   ${c.cyan}--help${c.reset}      Show this help message
 
 ${c.bold}Quick Start:${c.reset}
-  ${c.dim}$ metatransformr config              # Set up (auto-detects most things)${c.reset}
-  ${c.dim}$ metatransformr deploy              # Deploy to AWS${c.reset}
-  ${c.dim}$ metatransformr watch 1234567890    # Set tweet to watch${c.reset}
-  ${c.dim}$ metatransformr status              # Verify everything works${c.reset}
+  ${c.dim}$ singularityengine config              # Set up (auto-detects most things)${c.reset}
+  ${c.dim}$ singularityengine deploy              # Deploy to AWS${c.reset}
+  ${c.dim}$ singularityengine watch 1234567890    # Set tweet to watch${c.reset}
+  ${c.dim}$ singularityengine status              # Verify everything works${c.reset}
 
-${c.bold}Docs:${c.reset} https://github.com/Metatransformer/metatransformr
+${c.bold}Docs:${c.reset} https://github.com/Metatransformer/singularity-engine
 `);
 }
 

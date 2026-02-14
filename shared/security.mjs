@@ -115,11 +115,11 @@ export function getRejectionReply(username, category) {
   const replies = {
     injection: [
       `@${username} Nice try! 🦀 That looked like a prompt injection. Build something fun instead!`,
-      `@${username} 🛡️ Injection attempt detected. Metatransformr only builds apps, not exploits!`,
+      `@${username} 🛡️ Injection attempt detected. SingularityEngine only builds apps, not exploits!`,
       `@${username} Nope! 🦀 Our security caught that one. Try a real build request!`,
     ],
     nsfw: [
-      `@${username} 🦀 Metatransformr keeps it clean! Try something creative instead.`,
+      `@${username} 🦀 SingularityEngine keeps it clean! Try something creative instead.`,
     ],
     phishing: [
       `@${username} 🚫 We don't build phishing pages. How about a legitimate app instead?`,
@@ -211,11 +211,11 @@ export function scanGeneratedCode(html) {
     }
   }
 
-  // Allow fetch ONLY to metatransformr-db API
+  // Allow fetch ONLY to singularity-db API
   const fetchMatches = html.matchAll(/fetch\s*\(\s*[`'"](.*?)[`'"]/g);
   for (const match of fetchMatches) {
     const url = match[1];
-    if (!url.includes("execute-api") && !url.includes("metatransformr-db") && !url.startsWith("$") && !url.startsWith("${")) {
+    if (!url.includes("execute-api") && !url.includes("singularity-db") && !url.startsWith("$") && !url.startsWith("${")) {
       violations.push(`unauthorized fetch target: ${url}`);
     }
   }
@@ -227,7 +227,7 @@ export function scanGeneratedCode(html) {
   ];
   for (const pattern of dynamicFetchPatterns) {
     if (pattern.test(html)) {
-      const nonDbFetches = html.replace(/class\s+MetatransformrDB[\s\S]*?^}/m, '');
+      const nonDbFetches = html.replace(/class\s+SingularityDB[\s\S]*?^}/m, '');
       if (pattern.test(nonDbFetches)) {
         violations.push("dynamic fetch URL (potential exfiltration)");
       }
