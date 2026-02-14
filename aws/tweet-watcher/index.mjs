@@ -60,9 +60,10 @@ async function getUserBuildCount(username) {
 
 // --- Trigger detection ---
 // Two valid triggers:
-// 1. Reply to a registered thread containing "singularityengine <request>"
-// 2. @mention of owner containing "singularityengine <request>"
-const TRIGGER_RE = /singularityengine\s+(.+)/i;
+// 1. Reply to a registered thread containing "singularityengine.ai <request>"
+// 2. @mention of owner containing "singularityengine.ai <request>"
+// Keyword: "singularityengine.ai" (case-insensitive, dot optional for flexibility)
+const TRIGGER_RE = /singularityengine(?:\.ai)?\s+(.+)/i;
 
 function extractBuildRequest(text, tweetMeta) {
   const match = text.match(TRIGGER_RE);
@@ -72,14 +73,15 @@ function extractBuildRequest(text, tweetMeta) {
 
 // --- X API ---
 async function fetchReplies(sinceId) {
-  // Strategy: search for tweets mentioning "singularityengine" that either:
-  // - Are in a registered thread (conversation_id matches WATCHED_TWEET_ID)
+  // Strategy: search for tweets mentioning "singularityengine.ai" that either:
+  // - Are in a watched thread (WATCHED_TWEET_ID can be comma-separated for multiple threads)
   // - Or @mention the owner
   const queries = [];
 
-  if (WATCHED_TWEET_ID) {
-    // Replies to the registered thread
-    queries.push(`conversation_id:${WATCHED_TWEET_ID} "singularityengine" -is:retweet`);
+  // Support multiple watched threads (comma-separated)
+  const watchedIds = (WATCHED_TWEET_ID || "").split(",").map(s => s.trim()).filter(Boolean);
+  for (const threadId of watchedIds) {
+    queries.push(`conversation_id:${threadId} "singularityengine" -is:retweet`);
   }
 
   // Direct @mentions with the keyword
