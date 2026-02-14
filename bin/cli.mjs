@@ -571,12 +571,12 @@ async function cmdDeploy(args) {
         await ddb.send(new CreateTableCommand({
           TableName: tableName,
           KeySchema: [
-            { AttributeName: "pk", KeyType: "HASH" },
-            { AttributeName: "sk", KeyType: "RANGE" },
+            { AttributeName: "ns", KeyType: "HASH" },
+            { AttributeName: "key", KeyType: "RANGE" },
           ],
           AttributeDefinitions: [
-            { AttributeName: "pk", AttributeType: "S" },
-            { AttributeName: "sk", AttributeType: "S" },
+            { AttributeName: "ns", AttributeType: "S" },
+            { AttributeName: "key", AttributeType: "S" },
           ],
           BillingMode: "PAY_PER_REQUEST",
         }));
