@@ -53,8 +53,8 @@ async function getUserBuildCount(username) {
     ExpressionAttributeValues: { ":ns": "_builds", ":prefix": username },
   }));
   // Check builds in last hour
-  const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
-  const recent = (result.Items || []).filter(i => i.updatedAt > oneHourAgo);
+  const oneDayAgo = new Date(Date.now() - 86400000).toISOString();
+  const recent = (result.Items || []).filter(i => i.updatedAt > oneDayAgo);
   return recent.length;
 }
 
@@ -180,10 +180,10 @@ export async function handler() {
       continue;
     }
 
-    // Rate limit: 2 builds per user per hour (owner exempt)
+    // Rate limit: 2 builds per user per day (owner exempt)
     const userBuilds = await getUserBuildCount(reply.username);
     if (userBuilds >= 2) {
-      console.log(`⏭️ Rate limited @${reply.username} (${userBuilds} builds this hour)`);
+      console.log(`⏭️ Rate limited @${reply.username} (${userBuilds} builds today)`);
       continue;
     }
 
