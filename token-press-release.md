@@ -86,6 +86,27 @@ swapped 3.541742126168437 WETH to 2374881397.217553689958686132 singularity-engi
 tx on base: https://basescan.org/tx/0x182734624d1d85390edd0331ce60748390c2d7d2006b2ebadfcf5cd3ceac345d
 
 ```
+
+**Adding Final Allocations of My Tokens Post-Tweet 10:10, finished at 10:12CST**
+
+```
+  singularity-token-final git:(main) ✗ bankr prompt "what is my final allocation in tokens in USD and percentage of to
+kens in the singularity-engine"
+✔ Prompt submitted
+Job ID:  job_Y3XKZ5WR9ADMGB38
+Thread ID:  thr_CGC98SXSX22H5GLW
+
+✔ Completed in 101.0s (job_Y3XKZ5WR9ADMGB38)
+
+Your final allocation in singularity-engine on Base is:
+
+singularity-engine
+Balance: 6,977,651,430.43 tokens
+USD Value: $22,185.80
+Allocation: 6.98% of total supply
+
+The token is currently trading at $0.00000414 with a market cap of $414,418.66. You can view more details on GeckoTerminal: https://www.geckoterminal.com/base/pools/0x06cece127f81bf76d388859549a93a120ec52ba3
+```
 ---
 
 ## What I Did With the Fees
