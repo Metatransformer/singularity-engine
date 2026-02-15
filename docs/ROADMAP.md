@@ -1,57 +1,65 @@
-# Singularity Engine — Feature Roadmap
+# Singularity Engine — Roadmap
 
-## ✅ V1 (Shipped — Launch Ready)
-- [x] Tweet-to-app pipeline (tweet watcher → code runner → deployer → reply)
-- [x] X API OAuth replies (deployer posts directly)
-- [x] Multi-thread watching (comma-separated WATCHED_TWEET_ID)
-- [x] SingularityDB (persistent key-value store per app)
-- [x] Security: vard prompt injection, input sanitization, CSP injection, code scanning
-- [x] Rate limiting (2 builds/user/day)
-- [x] CLI tool (config, deploy, watch, status, start, stop)
-- [x] Builds API (GET /api/builds with sort/search/pagination)
-- [x] singularityengine.ai landing page (live builds gallery)
-- [x] Improved prompts (dark theme, animations, watermark, game audio)
-- [x] Web build API (POST /api/build — website-triggered builds)
+## v0.1 Beta (Current — Experimental) 🧪
 
-## 🔥 V1.1 — Launch Week (This Week)
-- [ ] **Build from website** — Add a build input on singularityengine.ai that calls POST /api/build. Real-time progress spinner → live link when done. No Twitter needed.
-- [ ] **Build preview/iframe** — Embed each build as a live iframe thumbnail in the gallery (not just a link)
-- [ ] **Social sharing** — OG meta tags per build page (`/apps/:id/` gets its own `<meta>` with screenshot). "Built with Singularity Engine" share card.
-- [ ] **Deploy web-builder Lambda** — Wire the new Lambda into deploy-aws.sh, add API Gateway route
-- [ ] **Showcase page** — `/showcase` with all builds, filterable by score/category/date, infinite scroll
-- [ ] **Build status endpoint** — `GET /api/build/:id/status` for polling during async builds
-- [ ] **Error recovery** — If code-runner fails, retry once with a simplified prompt
+**Tweet simple apps into existence.**
 
-## 🚀 V2 — Growth Engine
-- [ ] **Multi-file apps** — Graduate beyond single HTML. Generate `index.html` + `style.css` + `app.js`. Still hosted on GitHub Pages.
-- [ ] **App forking** — "Remix this" button. Take any existing build, add a modification prompt, get a new version.
-- [ ] **Build threads** — Iterative building. Reply to a build with "now add dark mode" → updates the same app.
-- [ ] **Custom domains** — Users can point their own domain at a build (CNAME → GitHub Pages)
-- [ ] **Templates** — Pre-built starting points: "SingularityEngine build me a portfolio like template:developer"
-- [ ] **User profiles** — `/u/:username` page showing all builds by that X user, total builds, top scores
-- [ ] **Leaderboard** — Top builders by count, top apps by coolness score, weekly highlights
-- [ ] **Discord integration** — Same pipeline but triggered from Discord messages
+This is an early, experimental release. Expect bugs, rough edges, and rapid iteration. You're seeing the machine learn to walk.
 
-## 🧠 V3 — Platform
-- [ ] **Accounts + dashboard** — Sign in with X, manage your builds, edit/delete, custom slugs
-- [ ] **Build analytics** — View count, unique visitors per app (injected tracking pixel)
-- [ ] **AI app upgrades** — Pay to upgrade a build: add backend (Supabase), auth, custom DB
-- [ ] **Marketplace** — Browse/install community builds as templates
-- [ ] **API for developers** — Authenticated API for programmatic builds (CI/CD integration, Slack bots, etc.)
-- [ ] **Multi-model** — Choose Claude, GPT, Gemini as the builder (compare quality)
-- [ ] **Collaborative builds** — Multiple people tweet modifications to the same app thread
-- [ ] **Plugin system** — SingularityDB extensions: image upload, real-time sync, auth
+**What's in v0.1:**
+- Tweet `SingularityEngine build me a <thing>` → AI builds a live web app in ~45 seconds
+- Single-page HTML/CSS/JS apps (no frameworks, no external deps)
+- Persistent data via SingularityDB (DynamoDB-backed key-value store per app)
+- No auth required — open to anyone on X
+- Deployed to GitHub Pages via @metatransformr's account
+- Server costs fronted by [@metatransformr](https://x.com/metatransformr)
+- Rate limited: 2 builds per user per day
+- Security: prompt injection detection, code scanning, CSP injection
+- Self-hostable — clone the repo and deploy your own in minutes
 
-## 💰 V4 — Monetization
-- [ ] **Pro tier** — More builds/day, priority queue, larger apps, custom domains
-- [ ] **Sponsored builds** — Brands pay to have "Built with [Brand]" watermark on viral apps
-- [ ] **White-label** — Companies deploy their own branded Singularity Engine
-- [ ] **Build-to-deploy** — One-click upgrade from GitHub Pages to Vercel/Netlify with real backend
+**Known limitations:**
+- Single-file apps only (no multi-file projects yet)
+- No user accounts or auth
+- Apps may be buggy (AI-generated, not human-reviewed)
+- No edit/delete — builds are permanent once deployed
+- Rate limits are per-user, not per-app
 
-## 🛡️ Ongoing — Security & Infra
-- [ ] WAF on API Gateway (DDOS protection)
-- [ ] CloudWatch alarms (Lambda errors, throttles, DynamoDB capacity)
-- [ ] CORS lockdown (remove wildcard, allowlist known domains)
-- [ ] Abuse monitoring dashboard (rejected builds, repeat offenders)
-- [ ] Automated build quality checks (lighthouse score, accessibility)
-- [ ] Cost monitoring (per-build Anthropic API cost tracking)
+**Get help:** [Discord](https://discord.gg/clawd) · [GitHub Issues](https://github.com/Metatransformer/singularity-engine/issues)
+
+---
+
+## Post-Launch (v0.2) — Early Roadmap 🛠️
+
+- **Build from website** — Trigger builds directly from singularityengine.ai (no Twitter needed)
+- **Live iframe previews** — See apps running inside the gallery, not just links
+- **Social share cards** — OG meta tags per build with auto-generated preview images
+- **Showcase page** — Browse all builds with filtering, search, and infinite scroll
+- **Error recovery** — Auto-retry failed builds with simplified prompts
+- **Build status polling** — Real-time progress tracking for in-flight builds
+
+---
+
+## Next (v0.3) — Accounts & Integrations 🔐
+
+- **Auth & accounts** — Sign in with X, manage your builds
+- **Dashboard** — Edit, delete, rename, set custom slugs
+- **OpenClaw / agent integration** — Let AI agents trigger builds programmatically
+- **Multi-model** — Choose Claude, GPT, or Gemini as the builder
+- **Plugin system** — Extend SingularityDB with image upload, real-time sync, auth
+
+---
+
+## Ideation (Considering) 💡
+
+These are ideas we're exploring. No commitments — join the conversation to shape what gets built.
+
+- **Platform** — Marketplace for community-built templates, collaborative builds, analytics
+- **Monetization** — Pro tier, sponsored builds, white-label, build-to-deploy upgrades
+- **The Mesh** — Decentralized agent coordination layer (may ship alongside or under the metatransformer umbrella)
+- **Multi-file apps** — Generate full projects (HTML + CSS + JS), not just single files
+- **App forking / remixing** — "Remix this" button to iterate on any existing build
+- **Build threads** — Reply to a build with "now add dark mode" → updates the same app
+- **Custom domains** — Point your own domain at a build
+- **Discord / Slack integration** — Same pipeline, different surfaces
+
+**Have an idea?** [Open a GitHub issue](https://github.com/Metatransformer/singularity-engine/issues) or [join our Discord](https://discord.gg/clawd).
