@@ -189,13 +189,13 @@ describe("GET /api/data/:ns (list)", () => {
 });
 
 describe("GET /api/builds", () => {
-  it("returns paginated builds from _showcase namespace", async () => {
+  it("returns paginated builds from _showcase namespace with channel field", async () => {
     mockSend.mockResolvedValueOnce({
       Items: [
         {
           ns: "_showcase",
           key: "test-app",
-          value: { name: "Test App", score: 85, query: "test app", username: "user1", build_url: "https://example.com" },
+          value: { name: "Test App", score: 85, query: "test app", username: "user1", channel: "x", build_url: "https://example.com" },
           updatedAt: "2026-01-01T00:00:00Z",
         },
       ],
@@ -205,6 +205,25 @@ describe("GET /api/builds", () => {
     expect(result.parsedBody.builds).toHaveLength(1);
     expect(result.parsedBody.builds[0].name).toBe("Test App");
     expect(result.parsedBody.builds[0].score).toBe(85);
+    expect(result.parsedBody.builds[0].channel).toBe("x");
+    expect(result.parsedBody.page).toBe(1);
+    expect(result.parsedBody.per_page).toBe(10);
+    expect(result.parsedBody.total).toBe(1);
+  });
+
+  it("defaults channel to 'x' for legacy builds without channel field", async () => {
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        {
+          ns: "_showcase",
+          key: "legacy-app",
+          value: { name: "Legacy App", score: 60, query: "legacy", username: "user3", build_url: "https://example.com" },
+          updatedAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+    });
+    const result = parseResponse(await handler(makeEvent("GET", "/api/builds")));
+    expect(result.parsedBody.builds[0].channel).toBe("x");
   });
 
   it("unwraps old double-wrapped showcase values", async () => {
@@ -224,10 +243,39 @@ describe("GET /api/builds", () => {
   });
 });
 
+describe("GET /api/builds/:id/source", () => {
+  it("returns source HTML for a build", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: { ns: "_source", key: "test-app", value: { html: "<html>test</html>", htmlSize: 17 }, updatedAt: "2026-01-01T00:00:00Z" },
+    });
+    const result = parseResponse(await handler(makeEvent("GET", "/api/builds/test-app/source")));
+    expect(result.statusCode).toBe(200);
+    expect(result.parsedBody.id).toBe("test-app");
+    expect(result.parsedBody.html).toBe("<html>test</html>");
+    expect(result.parsedBody.htmlSize).toBe(17);
+  });
+
+  it("returns 404 when source not found", async () => {
+    mockSend.mockResolvedValueOnce({ Item: null });
+    const result = parseResponse(await handler(makeEvent("GET", "/api/builds/missing/source")));
+    expect(result.statusCode).toBe(404);
+  });
+});
+
 describe("404 handling", () => {
   it("returns 404 with route list for unknown paths", async () => {
     const result = parseResponse(await handler(makeEvent("GET", "/api/unknown")));
     expect(result.statusCode).toBe(404);
     expect(result.parsedBody.routes).toBeDefined();
+    expect(result.parsedBody.routes).toContain("GET /api/builds/:id/source");
+  });
+});
+
+describe("protected namespaces", () => {
+  it("blocks writes to _source namespace", async () => {
+    const result = parseResponse(await handler(makeEvent("PUT", "/api/data/_source/test", {
+      body: { value: "hack" },
+    })));
+    expect(result.statusCode).toBe(403);
   });
 });
