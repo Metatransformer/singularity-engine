@@ -105,9 +105,10 @@ GET /api/builds?page=1&per_page=10&sort=coolness&search=tetris
 GET /api/builds/:id
 
 # SingularityDB (used by generated apps)
-GET  /api/data/:namespace/:key
-POST /api/data/:namespace/:key  { "value": ... }
-GET  /api/data/:namespace        # List keys
+GET    /api/data/:namespace/:key            # Returns raw value
+PUT    /api/data/:namespace/:key  {value}   # Store a value
+DELETE /api/data/:namespace/:key            # Remove a key
+GET    /api/data/:namespace                 # List all keys
 ```
 
 ## Known Limitations
@@ -135,11 +136,49 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full roadmap.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for detailed release notes.
 
+## Development
+
+```bash
+git clone https://github.com/Metatransformer/singularity-engine.git
+cd singularity-engine
+npm install
+
+# Run unit tests (mocked DynamoDB, no AWS needed)
+npm run test:unit
+
+# Run integration tests (requires live API Gateway)
+npm run test:integration
+
+# Run all tests
+npm test
+
+# Preview deploy without making changes
+singularityengine deploy --dry-run
+```
+
+### Project Structure
+
+```
+aws/
+  code-runner/   # Claude code generation Lambda
+  db-api/        # REST API for builds + SingularityDB
+  deployer/      # GitHub Pages deployment Lambda
+  tweet-watcher/ # X API polling + build orchestration Lambda
+  web-builder/   # Website-triggered builds (unreleased)
+shared/          # Shared modules (prompts, security, X API client)
+bin/             # CLI and install scripts
+poller/          # Local reply poller (X API or OpenClaw)
+tests/           # Unit + integration tests (Vitest)
+site/            # Landing page (singularityengine.ai)
+docs/            # Architecture, security, setup guides
+```
+
 ## Contributing
 
 1. Fork the repo
 2. Create a feature branch
-3. Submit a PR
+3. Run `npm test` to verify tests pass
+4. Submit a PR
 
 Bug reports and feature requests: [GitHub Issues](https://github.com/Metatransformer/singularity-engine/issues)
 

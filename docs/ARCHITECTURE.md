@@ -102,6 +102,8 @@ Single table design with `ns` (namespace) partition key and `key` sort key.
 | `_builds` | Build log | `{appId, tweetId, username, request, appUrl, htmlSize}` |
 | `_showcase` | Public gallery | `{name, score, query, username, tweet_url, build_url}` |
 | `_reply_queue` | Pending replies | `{tweetId, username, appUrl, replyText, status}` |
+| `_rate_limits` | Per-user daily build counts | key: `username:YYYY-MM-DD`, value: `{count}` |
+| `_rejected` | Rejected request log | `{username, request, reason, category}` |
 | `<app-id>` | App data (SingularityDB) | User-defined key-value pairs |
 
 ## Generated App Model
