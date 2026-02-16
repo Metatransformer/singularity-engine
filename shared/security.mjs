@@ -145,7 +145,8 @@ export function getRejectionReply(username, category) {
     invalid: null, // no reply for invalid/empty inputs
   };
 
-  const options = replies[category] || replies.injection;
+  if (!(category in replies)) return replies.injection[Math.floor(Math.random() * replies.injection.length)];
+  const options = replies[category];
   if (!options) return null;
   return options[Math.floor(Math.random() * options.length)];
 }
