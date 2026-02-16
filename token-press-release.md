@@ -5,6 +5,19 @@
 **Status:** Binding public commitments — version-controlled on GitHub  
 
 ---
+
+## Update Feb 16th on Allocation/Market Cap/Vesting Press Release
+(bankr.bot)[bankr.bot) founder (@0xDeployer)[x.com/0xDeployer) graciously agreed to redirect fees from (bankr.bot)[bankr.bot] to singularity-engine to help us fund our grand vision: (press release)[https://x.com/metatransformr/status/2023205497499680838]
+He'sa really great guy.
+(press release)[https://x.com/metatransformr/status/2023205497499680838])
+
+
+```
+token: singularity-engine (0x06cece127f81bf76d388859549a93a120ec52ba3)
+your balance: 10,859,288,916.5 tokens ($96,261.94)
+
+this is a bankr-deployed token with 1,336 holders and a market cap of $873,932.```
+```
 ## Disclosure 
 More about the launch later. on to tokens.
 ## What Happened
@@ -103,10 +116,12 @@ Your final allocation in singularity-engine on Base is:
 singularity-engine
 Balance: 6,977,651,430.43 tokens
 USD Value: $22,185.80
-Allocation: 6.98% of total supply
+Allocation: ~6.9%% of total supply (updated — fees were redirected by bankrbot founder, actual allocation higher than initial bankr query showed)
 
 The token is currently trading at $0.00000414 with a market cap of $414,418.66. You can view more details on GeckoTerminal: https://www.geckoterminal.com/base/pools/0x06cece127f81bf76d388859549a93a120ec52ba3
 ```
+
+
 ---
 
 ## What I Did With the Fees
