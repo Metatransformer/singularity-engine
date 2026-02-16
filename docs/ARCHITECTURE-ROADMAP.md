@@ -1,237 +1,289 @@
-# Architecture Roadmap
+# Singularity Engine — Architecture Roadmap
 
-> Singularity Engine — from tweet-to-app pipeline to full autonomous build platform.
-
-## Current Architecture (v1)
-
-```
-[X/Twitter] → tweet-watcher → code-runner (Claude) → deployer (GitHub Pages) → reply
-                                    ↓                      ↓
-                              SingularityDB          _builds / _showcase / _source
-                              (DynamoDB)
-```
-
-- **Single DynamoDB table** (`singularity-db`) with namespace partitioning
-- **4 Lambda functions**: tweet-watcher, code-runner, deployer, db-api
-- **EventBridge** polls X every 2 minutes
-- **API Gateway v2** serves public builds API + SingularityDB key-value store
-- **GitHub Pages** hosts deployed apps as static HTML
+**Last updated:** February 16, 2026  
+**Status:** Living document — updated as architecture evolves
 
 ---
 
-## 1. DB Isolation
+## Current Architecture (v0.1 — Launch)
 
-### Now: Namespace Partitioning
-All data lives in one DynamoDB table with logical namespaces:
-- `_builds` — Build metadata (private)
-- `_showcase` — Public gallery data (no source code)
-- `_source` — HTML source files (private, separate from public data)
-- `_system` — Internal state (last processed tweet, etc.)
-- `_reply_queue` — Pending replies
-- `_rate_limits` — Per-user daily build counts
-- `_rejected` — Abuse logs
-- User namespaces — Per-app key-value data (SingularityDB)
+```
+                    ┌─────────────────┐
+                    │   X / Twitter    │  ← Channel #1
+                    └────────┬────────┘
+                             │ poll (2 min)
+                    ┌────────▼────────┐
+                    │  Tweet Watcher   │  Lambda (300s)
+                    │  - trigger detect│
+                    │  - rate limit    │
+                    │  - sanitize      │
+                    └────────┬────────┘
+                             │ invoke
+                    ┌────────▼────────┐
+                    │   Code Runner    │  Lambda (180s, 512MB)
+                    │  - Claude Sonnet │
+                    │  - HTML gen      │
+                    │  - DB injection  │
+                    │  - security scan │
+                    └────────┬────────┘
+                             │ invoke
+                    ┌────────▼────────┐
+                    │    Deployer      │  Lambda (30s)
+                    │  - GitHub Pages  │
+                    │  - DynamoDB log  │
+                    │  - X API reply   │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+        GitHub Pages    DynamoDB      X API Reply
+        (hosting)     (build log)    (user notification)
+```
 
-### Future: Per-App Isolated Storage
-- Each generated app gets its own walled-off database namespace
-- Migration path: DynamoDB → MongoDB (per-app collections) or Supabase (per-app schemas with RLS)
-- App data cannot leak between namespaces
-- Admin API for managing app storage quotas
-
-### Future: Multi-Tenant Database
-- Dedicated Mongo/Supabase instance per high-value client
-- Connection pooling and resource isolation
-- Automated provisioning via infrastructure-as-code
+**Single DynamoDB table** (`singularity-db`) with namespace/key schema:
+- `_builds` — build metadata (public)
+- `_showcase` — curated gallery data (public)
+- `_source` — raw HTML source (private, planned)
+- `_reply_queue` — pending X replies (internal)
+- `_rate_limits` — per-user daily limits (internal)
+- `_rejected` — blocked/failed builds (internal)
+- `_system` — system state (internal)
+- `{app-id}` — per-app user data (public read/write)
 
 ---
 
-## 2. Auth Per App
+## A1: Full Architectural Audit
+
+### Current Strengths
+- Clean Lambda separation (single responsibility per function)
+- Security scanner catches common injection patterns
+- SingularityDB client auto-injected (not AI-generated)
+- CSP headers restrict runtime fetch to API Gateway only
+- Rate limiting per user per day
+
+### Known Gaps
+- No input validation on Data API beyond namespace protection
+- No request signing or API authentication
+- No build queue (concurrent builds could collide on GitHub API)
+- No retry logic on Lambda invocations
+- No dead letter queue for failed builds
+- Deployer timeout (30s) may be tight for GitHub API under load
+
+### Recommended Actions
+1. Add API Gateway request validation (JSON schema)
+2. Implement SQS queue between tweet-watcher and code-runner for backpressure
+3. Add DLQ for failed code-runner invocations
+4. Implement idempotency keys on deployer writes
+5. Add CloudWatch alarms for error rates and latency
+
+---
+
+## A2: Prompt Hardening & Security
+
+### Current State
+- Custom `security.mjs` scanner checks for: eval(), Function(), fetch to non-API URLs, script injection, iframe, innerHTML patterns
+- SingularityDB class stripping prevents AI from generating its own DB client
+- CSP meta tag injected into all generated apps
 
 ### Roadmap
-1. **Phase 1**: Anonymous access (current) — apps use SingularityDB without auth
-2. **Phase 2**: API key per app — generated at build time, stored in `_system`
-3. **Phase 3**: User auth in generated apps — Supabase Auth integration
-   - Login/signup flows injected into generated HTML
-   - Row-level security on per-app data
-   - OAuth providers (Google, GitHub, X)
-4. **Phase 4**: App ownership — users can claim and manage their builds
-   - Transfer ownership, delete apps, set visibility
-   - Rate limits tied to authenticated users instead of Twitter usernames
+1. **Adopt OWASP LLM Top 10** as security framework
+2. **Prompt injection defense**: Add instruction hierarchy markers, output format validation
+3. **Output sandboxing**: Consider iframe sandbox attributes on GitHub Pages
+4. **Content policy**: Define what SE will/won't build (no auth flows, no crypto wallets, no data exfiltration)
+5. **Evaluate vetted tools**: Consider integrating Rebuff (prompt injection detection) or similar
 
 ---
 
-## 3. Multi-Channel Architecture
+## A3: Supply Chain Audit
 
-### Channel Interface (implemented)
+### Current Dependencies
+- `@anthropic-ai/sdk` — Anthropic's official SDK (trusted)
+- `@aws-sdk/*` — AWS official SDKs (trusted)
+- `dotenv` — env loading (widely used, low risk)
+- `vitest` — test runner (dev only)
+- `oauth-1.0a` + `crypto` — X API signing (small surface)
+
+### Recommended Actions
+1. Run `npm audit` and fix any vulnerabilities
+2. Pin exact versions in package-lock.json (already done)
+3. Add `npm audit` to CI pipeline
+4. Consider `socket.dev` or `snyk` for ongoing monitoring
+5. Minimize transitive dependencies
+
+---
+
+## A4: Database Isolation Architecture
+
+### Current Model
+All apps share one DynamoDB table, isolated by namespace (partition key). Any app can read/write any non-protected namespace if they know the name.
+
+### Short-term (v0.2)
+- **Namespace scoping**: Apps can only write to their own namespace (enforced by API Gateway authorizer or Lambda logic)
+- **Read isolation**: Apps get a scoped API URL that only allows access to their namespace
+- **Source separation**: Raw HTML stored in `_source` namespace, not exposed via public API
+
+### Medium-term (v0.3)
+- **Per-app API keys**: Generated at build time, scoped to single namespace
+- **Rate limiting per namespace**: Prevent abuse of data API
+- **TTL on data**: Auto-expire old app data (configurable)
+
+### Long-term (v1.0) — Full Isolation Options
+
+| Option | Pros | Cons |
+|---|---|---|
+| **DynamoDB + strict namespace scoping** | Zero provisioning, scales infinitely, pay-per-request | Shared table, blast radius if table throttled |
+| **DynamoDB per-app table** | Full isolation | Provisioning overhead, 2500 table limit per account |
+| **Supabase per-app project** | Full Postgres, auth built-in, realtime | Provisioning required, cost per project, API to manage |
+| **MongoDB Atlas per-app** | Flexible schema, generous free tier | Provisioning via API, connection management |
+| **Cloudflare D1 per-app** | SQLite, edge-local, zero cold start | Limited to Cloudflare ecosystem |
+| **Turso per-app** | libSQL (SQLite fork), edge replicas | Newer, smaller community |
+
+**Recommendation:** Stay on DynamoDB with strict namespace scoping for v0.2-0.3. Evaluate Cloudflare D1 or Turso for v1.0 if per-app isolation becomes critical. Both offer programmatic database creation via API with no manual devops.
+
+---
+
+## A5: Auth Architecture
+
+### Current State
+No authentication. All apps and APIs are public.
+
+### Roadmap
+
+**Phase 1 — API Keys (v0.2)**
+- Generate API key per build at deploy time
+- Inject into app as environment variable
+- Data API validates key → namespace mapping
+
+**Phase 2 — User Auth in Generated Apps (v0.3)**
+- Integrate Supabase Auth or Clerk as auth provider
+- Code-runner generates apps with optional auth flows
+- Auth state stored per-app, not globally
+
+**Phase 3 — Builder Auth (v1.0)**
+- GitHub OAuth for builders (view your builds, manage data)
+- Dashboard login for analytics and management
+- API tokens for programmatic access
+
+---
+
+## A6: Kubernetes & Off-AWS Portability
+
+### Current State
+Tightly coupled to AWS: Lambda, DynamoDB, API Gateway, EventBridge.
+
+### Abstraction Strategy
+
 ```
-shared/channels/base.mjs    — Abstract BaseChannel class
-shared/channels/x-twitter.mjs — X/Twitter implementation
+                ┌──────────────────────┐
+                │   Platform Adapter    │
+                ├──────────────────────┤
+                │ AWS Lambda           │  ← current
+                │ Docker + K8s         │  ← planned
+                │ Cloudflare Workers   │  ← possible
+                │ Fly.io               │  ← possible
+                └──────────────────────┘
 ```
 
-Every channel implements:
-- `pollForRequests()` — Receive triggers from the platform
-- `sendReply(request, result)` — Send build result back
-- `formatReply(request, result)` — Platform-specific reply formatting
+**Phase 1 — Containerize (v0.3)**
+- Dockerize each Lambda as standalone container
+- docker-compose for local development
+- Same containers deployable to ECS, Cloud Run, or K8s
+
+**Phase 2 — Abstract Cloud Services (v0.5)**
+- `StorageAdapter` interface: DynamoDB, Postgres, D1, Turso
+- `DeployAdapter` interface: GitHub Pages, Cloudflare Pages, Vercel, S3
+- `QueueAdapter` interface: SQS, Redis, BullMQ
+- `SchedulerAdapter` interface: EventBridge, cron, BullMQ
+
+**Phase 3 — Helm Chart (v1.0)**
+- `helm install singularity-engine` on any K8s cluster
+- Configurable backends via values.yaml
+- Auto-scaling based on build queue depth
+
+---
+
+## A7: Multi-Channel Architecture
+
+### Pluggable Channel Interface
+
+```javascript
+// shared/channels/base.mjs
+export class Channel {
+  async listen()          {} // Start receiving triggers
+  async reply(buildResult){} // Send result back to user
+  get name()              {} // Channel identifier
+}
+```
 
 ### Planned Channels
 
-| Channel | Trigger | Reply | Status |
-|---------|---------|-------|--------|
-| **X/Twitter** | Tweet with keyword | Tweet reply with link | Live |
-| **API** | POST /api/build | JSON response | Planned |
-| **OpenClaw Skills** | Skill invocation | Skill response | Planned |
-| **Mesh** | Mesh message | Mesh response | Planned |
-| **Discord** | Bot command | Embed with link | Planned |
-| **Slack** | Slash command | Block Kit message | Planned |
-| **Dashboard** | Web form | Live preview | Planned |
+| Channel | Trigger | Reply | Priority |
+|---|---|---|---|
+| **X / Twitter** | Keyword in tweet/reply | X API reply | ✅ Launch |
+| **Web API** | POST /api/build | JSON response | v0.2 |
+| **OpenClaw Skill** | Agent invocation | Agent message | v0.3 |
+| **The Mesh** | In-world command | In-world deploy | v0.5 |
+| **Discord** | Bot command | Channel message | v0.3 |
+| **Telegram** | Bot command | Chat message | v0.3 |
+| **Dashboard** | UI form | UI update | v0.4 |
+| **CLI** | Terminal command | Terminal output | v0.2 |
 
-### API Channel Design
+### Architecture
 ```
-POST /api/build
-{
-  "query": "a tetris game",
-  "username": "api-user",
-  "webhook_url": "https://..."  // optional callback
-}
-
-Response:
-{
-  "build_id": "...",
-  "status": "building",
-  "poll_url": "/api/build/:id/status"
-}
+Channel Adapter → Normalize to {query, username, channel, reply_to}
+    ↓
+Build Pipeline (channel-agnostic)
+    ↓
+Channel Adapter ← Send result via channel-specific reply
 ```
 
 ---
 
-## 4. K8s / Non-AWS Deployment
+## A8: Dashboard Architecture
 
-### Current: AWS-Native
-- Lambda functions with EventBridge triggers
-- API Gateway v2 for HTTP routing
-- DynamoDB for storage
+### Planned Features
 
-### Phase 1: Containerize Lambdas
-- Each Lambda already has a clean handler export
-- Wrap in Express/Fastify server for container deployment
-- Docker Compose for local development
-- Single `docker-compose up` to run the full pipeline locally
+**Builder Dashboard (v0.4)**
+- View all your builds (filter by date, status, channel)
+- Fork/remix existing builds
+- View build source code
+- Re-deploy or delete builds
+- Usage analytics (builds/day, data usage)
 
-### Phase 2: Abstract Cloud Provider
-- Infrastructure adapter layer:
-  ```
-  shared/infra/aws.mjs     — Current AWS implementation
-  shared/infra/k8s.mjs     — Kubernetes (any cloud)
-  shared/infra/docker.mjs  — Docker Compose (local dev)
-  ```
-- Storage adapter: DynamoDB → MongoDB → Postgres
-- Queue adapter: EventBridge → Redis/BullMQ → RabbitMQ
-- Object storage: GitHub Pages → S3 → GCS → R2
+**Admin Dashboard (v0.5)**
+- All builds across all users
+- Moderation tools (flag, remove builds)
+- System health (Lambda metrics, DynamoDB capacity, error rates)
+- Cost tracking (API calls, storage, compute)
 
-### Phase 3: Kubernetes Deployment
-- Helm chart for full platform deployment
-- Horizontal pod autoscaling for code-runner (CPU-bound)
-- Ingress controller for API routing
-- Persistent volumes for build artifacts
-- Secrets management (Vault/AWS Secrets Manager)
+**Tech Stack Options**
+- Next.js + Supabase Auth (matches SMBCP stack)
+- Remix + Cloudflare (edge-first)
+- Plain React + API Gateway (minimal)
 
-### Phase 4: Self-Hosted Distribution
-- One-command deploy: `singularityengine deploy --target k8s`
-- Support: AWS EKS, GKE, AKS, DigitalOcean, bare metal
-- Embedded database option (SQLite) for single-node deployments
+**Recommendation:** Next.js deployed on Vercel, using the existing builds API. Auth via GitHub OAuth. Start simple — build list + detail view + fork button.
 
 ---
 
-## 5. Dashboard
+## Priority Matrix
 
-### Admin Dashboard Features
-- **Build Gallery**: Browse all builds with search, filter by channel/score/date
-- **Source Viewer**: View/download HTML source for any build
-- **Build Triggers**: Manually trigger builds via web form
-- **Analytics**: Build counts, channel distribution, popular queries
-- **User Management**: View builders, rate limits, abuse logs
-- **Configuration**: Update trigger keywords, watched tweets, channel settings
-- **Monitoring**: Lambda invocation logs, error rates, latency
-
-### Tech Stack (Proposed)
-- Next.js App Router (SSR + API routes)
-- Tailwind CSS + shadcn/ui
-- Auth: Supabase Auth or NextAuth.js
-- Charts: Recharts or Tremor
-- Real-time: SSE or polling for live build status
-
----
-
-## 6. Security
-
-### Current Protections
-- Input sanitization via vard + custom regex patterns
-- CSP meta tag injection (restricts fetch to API Gateway only)
-- Security scanner on generated HTML (blocks eval, Function, etc.)
-- Protected DynamoDB namespaces (no public writes to `_system`, `_builds`, etc.)
-- Rate limiting (2 builds/user/day)
-- Value size limits (100KB max per key)
-
-### Roadmap
-
-#### Prompt Hardening
-- Adversarial prompt testing suite (red team the code-runner prompt)
-- Output validation: verify HTML structure, check for injection patterns
-- Sandboxed execution: run generated code in isolated iframe with CSP
-- Token budget enforcement: cap Claude API usage per build
-
-#### Supply Chain Audit
-- Lock all dependencies to exact versions
-- Automated `npm audit` in CI
-- SBOM (Software Bill of Materials) generation
-- No CDN/external imports in generated apps (already enforced)
-
-#### NPM Package Verification
-- Verify package integrity with `npm integrity` checksums
-- Pin transitive dependencies
-- Automated PR checks for dependency updates (Dependabot/Renovate)
-
-#### Infrastructure Security
-- Lambda function URLs with IAM auth (not public)
-- API Gateway request throttling (global + per-IP)
-- DynamoDB encryption at rest (enabled by default)
-- CloudWatch alarms for anomalous invocation patterns
-- VPC isolation for Lambda functions (if needed)
-
-#### Abuse Prevention
-- ML-based content classification for build requests
-- Image/canvas content scanning for generated apps
-- Phishing detection (generated apps mimicking login pages)
-- Escalating rate limits (exponential backoff for repeated abuse)
+| Item | Launch | v0.2 | v0.3 | v0.5 | v1.0 |
+|---|---|---|---|---|---|
+| X/Twitter channel | ✅ | | | | |
+| DynamoDB namespace isolation | | ✅ | | | |
+| Source file separation | | ✅ | | | |
+| Web API channel | | ✅ | | | |
+| CLI channel | | ✅ | | | |
+| Per-app API keys | | | ✅ | | |
+| Discord/Telegram channels | | | ✅ | | |
+| OpenClaw Skill channel | | | ✅ | | |
+| Docker containers | | | ✅ | | |
+| Builder dashboard | | | | ✅ | |
+| Mesh integration | | | | ✅ | |
+| K8s Helm chart | | | | | ✅ |
+| Full DB isolation | | | | | ✅ |
+| User auth in apps | | | ✅ | | |
 
 ---
 
-## 7. Architectural Audit Checklist
-
-### Pre-Launch
-- [x] DB schema separation (public builds vs private source)
-- [x] Channel interface abstraction
-- [x] Configurable bot account + trigger keyword
-- [x] Protected namespace enforcement
-- [x] Input sanitization (vard + custom patterns)
-- [x] CSP injection in generated apps
-- [x] Rate limiting per user
-- [ ] Integration tests against live API after deploy
-- [ ] Load test: concurrent build requests
-- [ ] Error budget monitoring (acceptable failure rate)
-
-### Post-Launch
-- [ ] Add API channel (POST /api/build)
-- [ ] Dashboard v1 (build gallery + manual triggers)
-- [ ] Per-app API keys for SingularityDB access
-- [ ] Containerize for local development
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Automated dependency audits
-- [ ] Adversarial prompt testing
-- [ ] Multi-region deployment
-
-### Scale Milestones
-- [ ] 100 builds/day: Current architecture handles this
-- [ ] 1,000 builds/day: Need async build queue (SQS/BullMQ)
-- [ ] 10,000 builds/day: Need horizontal scaling, build caching
-- [ ] 100,000 builds/day: Need dedicated infrastructure, CDN for builds
+*This roadmap is version-controlled. Updates committed with change history.*
