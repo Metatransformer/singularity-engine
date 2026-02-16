@@ -222,16 +222,15 @@ export function scanGeneratedCode(html) {
   }
 
   // Check for dynamic fetch URLs (template literals with variables, concatenation)
+  // Strip the SingularityDB class first since it uses fetch() with dynamic URLs legitimately
+  const nonDbCode = html.replace(/class\s+SingularityDB\s*\{[\s\S]*?\n\s*\}/g, '');
   const dynamicFetchPatterns = [
-    /fetch\s*\(\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*[,)]/g,
-    /fetch\s*\(\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*\+/g,
+    /fetch\s*\(\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*[,)]/,
+    /fetch\s*\(\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*\+/,
   ];
   for (const pattern of dynamicFetchPatterns) {
-    if (pattern.test(html)) {
-      const nonDbFetches = html.replace(/class\s+SingularityDB[\s\S]*?^}/m, '');
-      if (pattern.test(nonDbFetches)) {
-        violations.push("dynamic fetch URL (potential exfiltration)");
-      }
+    if (pattern.test(nonDbCode)) {
+      violations.push("dynamic fetch URL (potential exfiltration)");
     }
   }
 

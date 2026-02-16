@@ -100,6 +100,14 @@ DATA PERSISTENCE PATTERNS:
 - Save data after changes: await db.set("highscores", scores);
 - For leaderboards: load existing array, push new entry, sort, save back
 - NEVER assume db.get returns a value — always provide a default fallback
+- To initialize the app, create an async init() function called on load:
+  async function init() {
+    const data = await db.get("mydata") || defaultValue;
+    // render UI with data
+  }
+  init();
+- db.list() returns [{key, value, updatedAt}, ...] — useful for showing all stored data
+- All db operations are async — use await inside async functions only
 
 FOR GAMES specifically:
 - Score tracking with SingularityDB — use db.get/db.set for high scores and leaderboards
