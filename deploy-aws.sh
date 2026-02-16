@@ -161,13 +161,13 @@ deploy_lambda() {
 deploy_lambda "$CODE_RUNNER_FN" "aws/code-runner/run.mjs" "true" "aws/code-runner/package.json" \
   "TABLE_NAME=$TABLE_NAME" 120 512
 
-# 3. Deploy Deployer (needs its own package.json)
+# 3. Deploy Deployer (needs shared modules for x-api-client.mjs)
 TMPDIR_DEPLOYER=$(mktemp -d)
 cat > "$TMPDIR_DEPLOYER/package.json" << 'PKGJSON'
 {"name":"singularity-deployer","version":"1.0.0","type":"module","dependencies":{"@aws-sdk/client-dynamodb":"^3.0.0","@aws-sdk/lib-dynamodb":"^3.0.0"}}
 PKGJSON
-deploy_lambda "$DEPLOYER_FN" "aws/deployer/index.mjs" "false" "$TMPDIR_DEPLOYER/package.json" \
-  "TABLE_NAME=$TABLE_NAME,GITHUB_REPO=${GITHUB_REPO:-your-org/singularity-builds}" 30 256
+deploy_lambda "$DEPLOYER_FN" "aws/deployer/index.mjs" "true" "$TMPDIR_DEPLOYER/package.json" \
+  "TABLE_NAME=$TABLE_NAME,GITHUB_REPO=${GITHUB_REPO:-your-org/singularity-builds},GITHUB_TOKEN=${GITHUB_TOKEN:-},GITHUB_PAGES_URL=${GITHUB_PAGES_URL:-},REPLY_MODE=${REPLY_MODE:-openclaw},X_CONSUMER_KEY=${X_CONSUMER_KEY:-},X_CONSUMER_SECRET=${X_CONSUMER_SECRET:-},X_ACCESS_TOKEN=${X_ACCESS_TOKEN:-},X_ACCESS_TOKEN_SECRET=${X_ACCESS_TOKEN_SECRET:-}" 30 256
 rm -rf "$TMPDIR_DEPLOYER"
 
 # 4. Deploy Tweet Watcher
@@ -176,10 +176,20 @@ cat > "$TMPDIR_WATCHER/package.json" << 'PKGJSON'
 {"name":"singularity-watcher","version":"1.0.0","type":"module","dependencies":{"@aws-sdk/client-dynamodb":"^3.0.0","@aws-sdk/lib-dynamodb":"^3.0.0","@aws-sdk/client-lambda":"^3.0.0"}}
 PKGJSON
 deploy_lambda "$WATCHER_FN" "aws/tweet-watcher/index.mjs" "true" "$TMPDIR_WATCHER/package.json" \
-  "TABLE_NAME=$TABLE_NAME,CODE_RUNNER_FUNCTION=$CODE_RUNNER_FN,DEPLOYER_FUNCTION=$DEPLOYER_FN" 300 256
+  "TABLE_NAME=$TABLE_NAME,CODE_RUNNER_FUNCTION=$CODE_RUNNER_FN,DEPLOYER_FUNCTION=$DEPLOYER_FN,X_BEARER_TOKEN=${X_BEARER_TOKEN:-},WATCHED_TWEET_ID=${WATCHED_TWEET_ID:-},OWNER_USERNAME=${OWNER_USERNAME:-}" 300 256
 rm -rf "$TMPDIR_WATCHER"
 
-# 5. Create EventBridge schedule
+# 5. Deploy DB API
+DB_API_FN="${DB_API_FN:-singularity-db-api}"
+TMPDIR_DBAPI=$(mktemp -d)
+cat > "$TMPDIR_DBAPI/package.json" << 'PKGJSON'
+{"name":"singularity-db-api","version":"1.0.0","type":"module","dependencies":{"@aws-sdk/client-dynamodb":"^3.0.0","@aws-sdk/lib-dynamodb":"^3.0.0"}}
+PKGJSON
+deploy_lambda "$DB_API_FN" "aws/db-api/index.mjs" "false" "$TMPDIR_DBAPI/package.json" \
+  "TABLE_NAME=$TABLE_NAME" 10 256
+rm -rf "$TMPDIR_DBAPI"
+
+# 6. Create EventBridge schedule
 echo ""
 echo "⏰ Setting up EventBridge schedule..."
 

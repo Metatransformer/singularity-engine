@@ -42,24 +42,41 @@ function rateCoolness(request, htmlSize) {
 }
 
 async function pushToGitHub(appId, html) {
+  if (!GITHUB_TOKEN) throw new Error("GITHUB_TOKEN not configured");
+  if (!html || html.length < 50) throw new Error("Generated HTML is too small to deploy");
+
   const path = `apps/${appId}/index.html`;
   const content = Buffer.from(html).toString("base64");
+  const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
+  const headers = {
+    Authorization: `Bearer ${GITHUB_TOKEN}`,
+    "Content-Type": "application/json",
+  };
 
-  const res = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`,
-    {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${GITHUB_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message: `🤖 Deploy ${appId}`,
-        content,
-        branch: "main",
-      }),
+  // Check if file already exists (need SHA for updates)
+  let sha;
+  try {
+    const existing = await fetch(apiUrl, { headers });
+    if (existing.ok) {
+      const data = await existing.json();
+      sha = data.sha;
     }
-  );
+  } catch {
+    // File doesn't exist yet — that's fine
+  }
+
+  const body = {
+    message: `Deploy ${appId}`,
+    content,
+    branch: "main",
+  };
+  if (sha) body.sha = sha;
+
+  const res = await fetch(apiUrl, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(body),
+  });
 
   if (!res.ok) {
     const text = await res.text();
