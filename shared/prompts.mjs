@@ -70,13 +70,18 @@ SINGULARITY DB — CRITICAL:
 A <script> block containing the SingularityDB client class will be AUTOMATICALLY INJECTED into your HTML right after the <head> tag.
 DO NOT define your own SingularityDB class. DO NOT set any API URL. The client is pre-configured.
 A global variable "db" is already initialized and ready to use. Just call:
-  await db.get("key")       → returns the value, or null if not found
-  await db.set("key", value) → stores any JSON-serializable value
-  await db.delete("key")     → removes the key
+  await db.get("key")       → returns the stored value directly (string, number, object, array), or null if not found
+  await db.set("key", value) → stores any JSON-serializable value, returns {ok: true}
+  await db.delete("key")     → removes the key, returns {ok: true}
   await db.list()            → returns [{key, value, updatedAt}, ...]
 
+IMPORTANT db.get() behavior: The return value is the ACTUAL stored value, not a wrapper.
+  If you stored a number: db.get("score") returns 42 (not {value: 42})
+  If you stored an array: db.get("scores") returns [{name:"A",score:100}] (not {value: [...]})
+  If the key doesn't exist: db.get("missing") returns null
+
 The API URL and namespace are ALREADY configured. You MUST NOT create a new SingularityDB instance or set any URL.
-Simply use the global "db" variable in your app code.
+Simply use the global "db" variable in your app code. All db methods are async — always use await.
 
 QUALITY STANDARDS (make every app impressive):
 - Loading screen: Show a minimal animated loader while the app initializes (CSS-only spinner or pulse)
@@ -89,6 +94,13 @@ QUALITY STANDARDS (make every app impressive):
 - Empty states: Show helpful messages when there's no data yet
 - Input validation: Validate user inputs with clear error feedback
 
+DATA PERSISTENCE PATTERNS:
+- Wrap all db calls in try/catch or check for null returns
+- Load data on page init: const scores = await db.get("highscores") || [];
+- Save data after changes: await db.set("highscores", scores);
+- For leaderboards: load existing array, push new entry, sort, save back
+- NEVER assume db.get returns a value — always provide a default fallback
+
 FOR GAMES specifically:
 - Score tracking with SingularityDB — use db.get/db.set for high scores and leaderboards
 - Sound effects using Web Audio API (oscillators only — no external audio files)
@@ -96,6 +108,7 @@ FOR GAMES specifically:
 - Show controls guide on first load
 - Game over screen with score and replay button
 - Smooth 60fps with requestAnimationFrame
+- Canvas games: handle window resize, use devicePixelRatio for sharp rendering
 
 FOR TOOLS/UTILITIES:
 - Clean form layouts with labels and placeholders
