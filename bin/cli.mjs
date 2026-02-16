@@ -1222,9 +1222,10 @@ ${c.green}GET${c.reset} ${baseUrl}/api/builds/:id
 
 ${c.bold}━━━ Raw Key-Value API (SingularityDB) ━━━${c.reset}
 
-${c.green}GET${c.reset}  ${baseUrl}/api/data/:namespace/:key     — Read a value
-${c.yellow}POST${c.reset} ${baseUrl}/api/data/:namespace/:key     — Write a value (JSON body)
-${c.green}GET${c.reset}  ${baseUrl}/api/data/:namespace            — List all keys in namespace
+${c.green}GET${c.reset}    ${baseUrl}/api/data/:namespace/:key     — Read a value
+${c.yellow}PUT${c.reset}    ${baseUrl}/api/data/:namespace/:key     — Write a value (JSON body: {value: ...})
+${c.red}DELETE${c.reset} ${baseUrl}/api/data/:namespace/:key     — Delete a key
+${c.green}GET${c.reset}    ${baseUrl}/api/data/:namespace            — List all keys in namespace
 
 ${c.bold}━━━ Embed on Your Website ━━━${c.reset}
 
@@ -1244,9 +1245,9 @@ ${c.bold}━━━ cURL Examples ━━━${c.reset}
   curl "${baseUrl}/api/builds/tetris-clone"
 
   ${c.dim}# Store custom data${c.reset}
-  curl -X POST "${baseUrl}/api/data/myapp/settings" \\
+  curl -X PUT "${baseUrl}/api/data/myapp/settings" \\
     -H "Content-Type: application/json" \\
-    -d '{"theme": "dark", "lang": "en"}'
+    -d '{"value": {"theme": "dark", "lang": "en"}}'
 `);
 }
 
