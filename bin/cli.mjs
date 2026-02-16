@@ -736,9 +736,11 @@ async function cmdDeploy(args) {
       { TABLE_NAME: tableName, ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY || "", SINGULARITY_DB_URL: env.SINGULARITY_DB_URL || "" },
       120, 512);
 
-    await deployLambda(DEPLOYER_FN, "aws/deployer/index.mjs", false,
+    await deployLambda(DEPLOYER_FN, "aws/deployer/index.mjs", true,
       { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0" },
-      { TABLE_NAME: tableName, GITHUB_REPO: env.GITHUB_REPO || "", GITHUB_TOKEN: env.GITHUB_TOKEN || "", GITHUB_PAGES_URL: env.GITHUB_PAGES_URL || "" },
+      { TABLE_NAME: tableName, GITHUB_REPO: env.GITHUB_REPO || "", GITHUB_TOKEN: env.GITHUB_TOKEN || "", GITHUB_PAGES_URL: env.GITHUB_PAGES_URL || "",
+        REPLY_MODE: env.REPLY_MODE || "", X_CONSUMER_KEY: env.X_CONSUMER_KEY || "", X_CONSUMER_SECRET: env.X_CONSUMER_SECRET || "",
+        X_ACCESS_TOKEN: env.X_ACCESS_TOKEN || "", X_ACCESS_TOKEN_SECRET: env.X_ACCESS_TOKEN_SECRET || "" },
       30, 256);
 
     await deployLambda(WATCHER_FN, "aws/tweet-watcher/index.mjs", true,

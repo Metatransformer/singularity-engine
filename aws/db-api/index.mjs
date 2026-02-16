@@ -3,21 +3,23 @@
  * Serves build data from DynamoDB for embedding on websites.
  *
  * Routes:
- *   GET  /api/builds?page=1&per_page=10           — paginated builds list (public gallery)
- *   GET  /api/builds/:id                           — single build by ID
- *   GET  /api/data/:namespace/:key                 — raw key-value get (SingularityDB)
- *   POST /api/data/:namespace/:key  {value}        — raw key-value put (SingularityDB)
- *   GET  /api/data/:namespace                      — list keys in namespace
+ *   GET    /api/builds?page=1&per_page=10           — paginated builds list (public gallery)
+ *   GET    /api/builds/:id                           — single build by ID
+ *   GET    /api/data/:namespace/:key                 — raw key-value get (SingularityDB)
+ *   POST   /api/data/:namespace/:key  {value}        — raw key-value put (SingularityDB)
+ *   PUT    /api/data/:namespace/:key  {value}        — raw key-value put (SingularityDB)
+ *   DELETE /api/data/:namespace/:key                 — raw key-value delete (SingularityDB)
+ *   GET    /api/data/:namespace                      — list keys in namespace
  */
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand, DeleteCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = process.env.TABLE_NAME || "singularity-db";
 
 // System namespaces that cannot be written to via the public API
-const PROTECTED_NAMESPACES = new Set(["_system", "_builds", "_reply_queue", "_showcase"]);
+const PROTECTED_NAMESPACES = new Set(["_system", "_builds", "_reply_queue", "_showcase", "_rejected", "_rate_limits"]);
 
 function cors(body, status = 200) {
   return {
@@ -28,12 +30,19 @@ function cors(body, status = 200) {
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "*",
     },
-    body: typeof body === "string" ? body : JSON.stringify(body),
+    body: JSON.stringify(body),
   };
 }
 
+/** Unwrap values that may have been double-wrapped as {value: actual} from old storage format */
+function unwrapValue(val) {
+  if (val && typeof val === "object" && "value" in val && Object.keys(val).length === 1) {
+    return val.value;
+  }
+  return val;
+}
+
 async function getBuilds(page, perPage, sort = "created_at", search = "") {
-  // Query _showcase namespace
   const result = await ddb.send(new QueryCommand({
     TableName: TABLE,
     KeyConditionExpression: "ns = :ns",
@@ -46,17 +55,21 @@ async function getBuilds(page, perPage, sort = "created_at", search = "") {
   if (search) {
     const q = search.toLowerCase();
     items = items.filter((item) => {
-      const name = (item.value?.name || "").toLowerCase();
-      const username = (item.value?.username || "").toLowerCase();
+      const v = unwrapValue(item.value);
+      const name = (v?.name || "").toLowerCase();
+      const username = (v?.username || "").toLowerCase();
       return name.includes(q) || username.includes(q);
     });
   }
 
   // Sort
   if (sort === "coolness") {
-    items.sort((a, b) => (b.value?.score || 0) - (a.value?.score || 0));
+    items.sort((a, b) => {
+      const va = unwrapValue(a.value);
+      const vb = unwrapValue(b.value);
+      return (vb?.score || 0) - (va?.score || 0);
+    });
   } else {
-    // Default: created_at (most recent first)
     items.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
   }
 
@@ -64,15 +77,18 @@ async function getBuilds(page, perPage, sort = "created_at", search = "") {
   const start = (page - 1) * perPage;
   const paged = items.slice(start, start + perPage);
 
-  const builds = paged.map((item) => ({
-    id: item.key,
-    name: item.value?.name || item.key,
-    score: item.value?.score || item.value?.coolness || 50,
-    query: item.value?.query || item.value?.request || "",
-    username: item.value?.username || "",
-    tweet_url: item.value?.tweetUrl || item.value?.tweet_url || "",
-    build_url: item.value?.buildUrl || item.value?.build_url || item.value?.url || "",
-  }));
+  const builds = paged.map((item) => {
+    const v = unwrapValue(item.value);
+    return {
+      id: item.key,
+      name: v?.name || item.key,
+      score: v?.score || v?.coolness || 50,
+      query: v?.query || v?.request || "",
+      username: v?.username || "",
+      tweet_url: v?.tweetUrl || v?.tweet_url || "",
+      build_url: v?.buildUrl || v?.build_url || v?.url || "",
+    };
+  });
 
   return { builds, total, page, per_page: perPage };
 }
@@ -83,15 +99,15 @@ async function getBuild(id) {
     Key: { ns: "_showcase", key: id },
   }));
   if (!result.Item) return null;
-  const item = result.Item;
+  const v = unwrapValue(result.Item.value);
   return {
-    id: item.key,
-    name: item.value?.name || item.key,
-    score: item.value?.score || item.value?.coolness || 50,
-    query: item.value?.query || item.value?.request || "",
-    username: item.value?.username || "",
-    tweet_url: item.value?.tweetUrl || item.value?.tweet_url || "",
-    build_url: item.value?.buildUrl || item.value?.build_url || item.value?.url || "",
+    id: result.Item.key,
+    name: v?.name || result.Item.key,
+    score: v?.score || v?.coolness || 50,
+    query: v?.query || v?.request || "",
+    username: v?.username || "",
+    tweet_url: v?.tweetUrl || v?.tweet_url || "",
+    build_url: v?.buildUrl || v?.build_url || v?.url || "",
   };
 }
 
@@ -110,6 +126,13 @@ async function putData(ns, key, value) {
   }));
 }
 
+async function deleteData(ns, key) {
+  await ddb.send(new DeleteCommand({
+    TableName: TABLE,
+    Key: { ns, key },
+  }));
+}
+
 async function listNamespace(ns) {
   const result = await ddb.send(new QueryCommand({
     TableName: TABLE,
@@ -117,6 +140,20 @@ async function listNamespace(ns) {
     ExpressionAttributeValues: { ":ns": ns },
   }));
   return result.Items || [];
+}
+
+/** Parse request body, handling base64 encoding from API Gateway v2 */
+function parseBody(event) {
+  let raw = event.body;
+  if (!raw) return {};
+  if (event.isBase64Encoded) {
+    raw = Buffer.from(raw, "base64").toString("utf-8");
+  }
+  return typeof raw === "string" ? JSON.parse(raw) : raw;
+}
+
+function isProtectedNamespace(ns) {
+  return PROTECTED_NAMESPACES.has(ns) || ns.startsWith("_");
 }
 
 export async function handler(event) {
@@ -144,33 +181,45 @@ export async function handler(event) {
       return cors(build);
     }
 
+    // Match data routes: /api/data/:namespace/:key
+    const dataKeyMatch = path.match(/^\/api\/data\/([^/]+)\/([^/]+)\/?$/);
+
     // GET /api/data/:namespace/:key
-    const dataGetMatch = path.match(/^\/api\/data\/([^/]+)\/([^/]+)\/?$/);
-    if (method === "GET" && dataGetMatch) {
-      const item = await getData(decodeURIComponent(dataGetMatch[1]), decodeURIComponent(dataGetMatch[2]));
+    if (method === "GET" && dataKeyMatch) {
+      const item = await getData(decodeURIComponent(dataKeyMatch[1]), decodeURIComponent(dataKeyMatch[2]));
       if (!item) return cors({ error: "Not found" }, 404);
-      return cors(item.value);
+      // Return the unwrapped value directly
+      // The stored format is {ns, key, value: {value: actual}, updatedAt} (from client sending {value: v})
+      // We unwrap to return just the actual value
+      const val = unwrapValue(item.value);
+      return cors(val);
     }
 
     // POST/PUT /api/data/:namespace/:key
-    const dataPostMatch = path.match(/^\/api\/data\/([^/]+)\/([^/]+)\/?$/);
-    if ((method === "POST" || method === "PUT") && dataPostMatch) {
-      const ns = decodeURIComponent(dataPostMatch[1]);
-      // Block writes to system namespaces
-      if (PROTECTED_NAMESPACES.has(ns)) {
+    if ((method === "POST" || method === "PUT") && dataKeyMatch) {
+      const ns = decodeURIComponent(dataKeyMatch[1]);
+      if (isProtectedNamespace(ns)) {
         return cors({ error: "Cannot write to protected namespace" }, 403);
       }
-      // Block namespace names starting with _ (reserved for system)
-      if (ns.startsWith("_")) {
-        return cors({ error: "Namespaces starting with _ are reserved" }, 403);
-      }
-      const body = typeof event.body === "string" ? JSON.parse(event.body) : event.body;
+      const body = parseBody(event);
       // Limit value size to prevent abuse (100KB max)
       const bodyStr = JSON.stringify(body);
       if (bodyStr.length > 102400) {
         return cors({ error: "Value too large (max 100KB)" }, 413);
       }
-      await putData(ns, decodeURIComponent(dataPostMatch[2]), body);
+      // Store the value from the body — client sends {value: v}, we store v directly
+      const valueToStore = body.value !== undefined ? body.value : body;
+      await putData(ns, decodeURIComponent(dataKeyMatch[2]), valueToStore);
+      return cors({ ok: true });
+    }
+
+    // DELETE /api/data/:namespace/:key
+    if (method === "DELETE" && dataKeyMatch) {
+      const ns = decodeURIComponent(dataKeyMatch[1]);
+      if (isProtectedNamespace(ns)) {
+        return cors({ error: "Cannot delete from protected namespace" }, 403);
+      }
+      await deleteData(ns, decodeURIComponent(dataKeyMatch[2]));
       return cors({ ok: true });
     }
 
@@ -178,10 +227,14 @@ export async function handler(event) {
     const nsMatch = path.match(/^\/api\/data\/([^/]+)\/?$/);
     if (method === "GET" && nsMatch) {
       const items = await listNamespace(decodeURIComponent(nsMatch[1]));
-      return cors(items.map((i) => ({ key: i.key, value: i.value, updatedAt: i.updatedAt })));
+      return cors(items.map((i) => ({
+        key: i.key,
+        value: unwrapValue(i.value),
+        updatedAt: i.updatedAt,
+      })));
     }
 
-    return cors({ error: "Not found", routes: ["GET /api/builds", "GET /api/builds/:id", "GET /api/data/:ns/:key", "POST /api/data/:ns/:key", "GET /api/data/:ns"] }, 404);
+    return cors({ error: "Not found", routes: ["GET /api/builds", "GET /api/builds/:id", "GET /api/data/:ns/:key", "PUT /api/data/:ns/:key", "DELETE /api/data/:ns/:key", "GET /api/data/:ns"] }, 404);
   } catch (e) {
     console.error(e);
     return cors({ error: e.message }, 500);

@@ -11,7 +11,10 @@
     "deploy": "node bin/cli.mjs deploy",
     "start": "node bin/cli.mjs start",
     "stop": "node bin/cli.mjs stop",
-    "status": "node bin/cli.mjs status"
+    "status": "node bin/cli.mjs status",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/db-api.unit.test.mjs",
+    "test:integration": "vitest run tests/db-api.integration.test.mjs"
   },
   "dependencies": {
     "@andersmyrmel/vard": "^1.2.0",
@@ -28,5 +31,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Metatransformer/singularity-engine.git"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
   }
 }

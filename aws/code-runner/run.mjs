@@ -10,7 +10,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { writeFileSync, mkdirSync } from "fs";
-import { CODE_RUNNER_SYSTEM_PROMPT, buildUserPrompt } from "./shared/prompts.mjs";
+import { CODE_RUNNER_SYSTEM_PROMPT, buildUserPrompt, buildSingularityDBScript, SINGULARITY_DB_URL } from "./shared/prompts.mjs";
 import { scanGeneratedCode } from "./shared/security.mjs";
 
 const client = new Anthropic();
@@ -41,15 +41,21 @@ async function generateApp(request, appId) {
 
   // Inject Content-Security-Policy meta tag to restrict runtime behavior
   // Only allow fetch to our API Gateway, block all other external connections
-  const dbUrl = process.env.SINGULARITY_DB_URL || "";
+  const dbUrl = process.env.SINGULARITY_DB_URL || SINGULARITY_DB_URL;
   const dbOrigin = dbUrl ? new URL(dbUrl).origin : "https://*.execute-api.*.amazonaws.com";
   const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src ${dbOrigin}; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">`;
-  
-  // Insert CSP after <head> tag
+
+  // Build the SingularityDB client script with the correct API URL and namespace
+  const dbScript = buildSingularityDBScript(dbUrl, appId);
+
+  // Strip any SingularityDB class Claude may have generated (we inject the real one)
+  cleanHtml = cleanHtml.replace(/class\s+SingularityDB\s*\{[\s\S]*?\n\s*\}/g, '/* SingularityDB class removed — using injected version */');
+
+  // Insert CSP + SingularityDB script after <head> tag
   if (cleanHtml.includes("<head>")) {
-    cleanHtml = cleanHtml.replace("<head>", `<head>\n${cspTag}`);
+    cleanHtml = cleanHtml.replace("<head>", `<head>\n${cspTag}\n${dbScript}`);
   } else if (cleanHtml.includes("<html>")) {
-    cleanHtml = cleanHtml.replace("<html>", `<html><head>${cspTag}</head>`);
+    cleanHtml = cleanHtml.replace("<html>", `<html><head>${cspTag}\n${dbScript}</head>`);
   }
 
   // Security scan

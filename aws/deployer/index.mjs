@@ -10,7 +10,7 @@
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
-import { xApiPostReply } from "./shared/x-api-client.mjs";
+import { postReply as xApiPostReply } from "./shared/x-api-client.mjs";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = process.env.TABLE_NAME || "singularity-db";
