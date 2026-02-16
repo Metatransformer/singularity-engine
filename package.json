@@ -13,7 +13,7 @@
     "stop": "node bin/cli.mjs stop",
     "status": "node bin/cli.mjs status",
     "test": "vitest run",
-    "test:unit": "vitest run tests/db-api.unit.test.mjs",
+    "test:unit": "vitest run tests/*.unit.test.mjs",
     "test:integration": "vitest run tests/db-api.integration.test.mjs"
   },
   "dependencies": {
