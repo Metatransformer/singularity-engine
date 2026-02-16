@@ -15,8 +15,12 @@ const TABLE = process.env.TABLE_NAME || "singularity-db";
 const CODE_RUNNER_FN = process.env.CODE_RUNNER_FUNCTION || "singularity-code-runner";
 const DEPLOYER_FN = process.env.DEPLOYER_FUNCTION || "singularity-deployer";
 const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
-const WATCHED_TWEET_ID = process.env.WATCHED_TWEET_ID;
-const OWNER_USERNAME = process.env.OWNER_USERNAME || "your_x_username"; // Skip self-replies
+// Support both WATCHED_TWEET_IDS (new, comma-separated) and WATCHED_TWEET_ID (legacy)
+const WATCHED_TWEET_ID = process.env.WATCHED_TWEET_IDS || process.env.WATCHED_TWEET_ID;
+// X_BOT_USERNAME takes precedence over OWNER_USERNAME (legacy)
+const OWNER_USERNAME = process.env.X_BOT_USERNAME || process.env.OWNER_USERNAME || "metatransformr";
+// Configurable trigger keyword (default: singularityengine.ai)
+const TRIGGER_KEYWORD = process.env.TRIGGER_KEYWORD || "singularityengine.ai";
 
 // --- Security (shared module) ---
 import { sanitizeBuildRequest, getRejectionReply } from "./shared/security.mjs";
@@ -72,10 +76,15 @@ async function incrementUserBuildCount(username) {
 
 // --- Trigger detection ---
 // Two valid triggers:
-// 1. Reply to a registered thread containing "singularityengine.ai <request>"
-// 2. @mention of owner containing "singularityengine.ai <request>"
-// Keyword: "singularityengine.ai" (case-insensitive, dot optional for flexibility)
-const TRIGGER_RE = /singularityengine(?:\.ai)?\s+(.+)/i;
+// 1. Reply to a registered thread containing "<TRIGGER_KEYWORD> <request>"
+// 2. @mention of owner containing "<TRIGGER_KEYWORD> <request>"
+// Build regex from TRIGGER_KEYWORD env var
+function buildTriggerRegex(keyword) {
+  const kw = keyword.replace(/\.ai$/i, ""); // strip .ai suffix for flexible matching
+  const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`${escaped}(?:\\.ai)?\\s+(.+)`, "i");
+}
+const TRIGGER_RE = buildTriggerRegex(TRIGGER_KEYWORD);
 
 function extractBuildRequest(text, tweetMeta) {
   const match = text.match(TRIGGER_RE);
@@ -90,14 +99,17 @@ async function fetchReplies(sinceId) {
   // - Or @mention the owner
   const queries = [];
 
+  // Search keyword for X API query (strip .ai for broader matching)
+  const searchKeyword = TRIGGER_KEYWORD.replace(/\.ai$/i, "");
+
   // Support multiple watched threads (comma-separated)
   const watchedIds = (WATCHED_TWEET_ID || "").split(",").map(s => s.trim()).filter(Boolean);
   for (const threadId of watchedIds) {
-    queries.push(`conversation_id:${threadId} "singularityengine" -is:retweet`);
+    queries.push(`conversation_id:${threadId} "${searchKeyword}" -is:retweet`);
   }
 
   // Direct @mentions with the keyword
-  queries.push(`@${OWNER_USERNAME} "singularityengine" -is:retweet`);
+  queries.push(`@${OWNER_USERNAME} "${searchKeyword}" -is:retweet`);
 
   const allTweets = [];
   const seenIds = new Set();
@@ -279,6 +291,7 @@ export async function handler() {
         tweetId: reply.id,
         username: reply.username,
         request: check.cleaned,
+        channel: "x",
       });
 
       if (!deployResult.ok) {

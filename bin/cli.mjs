@@ -410,6 +410,13 @@ async function cmdConfig() {
   config.GITHUB_PAGES_URL = `https://${repoOwner}.github.io/${repoName}`;
   console.log(`  ${c.green}✅${c.reset} GitHub Pages URL: ${config.GITHUB_PAGES_URL}`);
 
+  // ═══ Bot Configuration ═══
+  console.log(`\n${c.bold}🤖 Bot Configuration${c.reset}`);
+  const existingBotUser = isPlaceholder(config.X_BOT_USERNAME) ? (config.OWNER_USERNAME || "") : config.X_BOT_USERNAME;
+  config.X_BOT_USERNAME = await ask("Bot X username (without @)", existingBotUser || "metatransformr");
+  config.TRIGGER_KEYWORD = await ask("Trigger keyword", config.TRIGGER_KEYWORD || "singularityengine.ai");
+  config.WATCHED_TWEET_IDS = await ask("Watched tweet IDs (comma-separated)", config.WATCHED_TWEET_IDS || config.WATCHED_TWEET_ID || "");
+
   // Auto-set defaults
   config.TABLE_NAME = config.TABLE_NAME || "singularity-db";
 
@@ -745,7 +752,7 @@ async function cmdDeploy(args) {
 
     await deployLambda(WATCHER_FN, "aws/tweet-watcher/index.mjs", true,
       { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0", "@aws-sdk/client-lambda": "^3.0.0", "@andersmyrmel/vard": "^1.0.0" },
-      { TABLE_NAME: tableName, CODE_RUNNER_FUNCTION: CODE_RUNNER_FN, DEPLOYER_FUNCTION: DEPLOYER_FN, X_BEARER_TOKEN: env.X_BEARER_TOKEN || "", WATCHED_TWEET_ID: env.WATCHED_TWEET_ID || "", OWNER_USERNAME: env.OWNER_USERNAME || "" },
+      { TABLE_NAME: tableName, CODE_RUNNER_FUNCTION: CODE_RUNNER_FN, DEPLOYER_FUNCTION: DEPLOYER_FN, X_BEARER_TOKEN: env.X_BEARER_TOKEN || "", WATCHED_TWEET_IDS: env.WATCHED_TWEET_IDS || env.WATCHED_TWEET_ID || "", WATCHED_TWEET_ID: env.WATCHED_TWEET_ID || "", X_BOT_USERNAME: env.X_BOT_USERNAME || env.OWNER_USERNAME || "", OWNER_USERNAME: env.OWNER_USERNAME || "", TRIGGER_KEYWORD: env.TRIGGER_KEYWORD || "singularityengine.ai" },
       300, 256);
 
     await deployLambda(DB_API_FN, "aws/db-api/index.mjs", false,
