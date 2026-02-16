@@ -1,6 +1,25 @@
+# Dependencies
 node_modules/
+
+# Environment & secrets
 .env
+.env.local
+.env.*.local
+
+# Poller state
 *.done
 pending-replies/
 done/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+*.zip
+function.zip
+/tmp/
