@@ -134,9 +134,10 @@ async function queueReply(tweetId, username, appUrl, request) {
 
 export async function handler(event) {
   try {
-    const { html, appId, tweetId, username, request } = typeof event.body === "string"
-      ? JSON.parse(event.body)
-      : event;
+    const parsed = typeof event.body === "string" ? JSON.parse(event.body) : event;
+    const { html, appId, tweetId, username, request } = parsed;
+    // Channel defaults to "x" for backwards compatibility
+    const channel = parsed.channel || "x";
 
     console.log(`📦 Deploying ${appId} for @${username}...`);
 
@@ -168,6 +169,17 @@ export async function handler(event) {
       },
     }));
 
+    // Write source to _source namespace (private, not exposed in public API)
+    await ddb.send(new PutCommand({
+      TableName: TABLE,
+      Item: {
+        ns: "_source",
+        key: appId,
+        value: { html, htmlSize: html.length },
+        updatedAt: now,
+      },
+    }));
+
     // Write to _showcase for public gallery (rate coolness based on complexity + fun)
     const score = rateCoolness(request, html.length);
     const name = request.length > 50 ? request.slice(0, 47) + "..." : request;
@@ -181,7 +193,9 @@ export async function handler(event) {
           score,
           query: request,
           username,
+          channel,
           tweet_url: tweetId ? `https://x.com/${username}/status/${tweetId}` : "",
+          user_url: tweetId ? `https://x.com/${username}` : "",
           build_url: appUrl,
           builtAt: now,
           htmlSize: html.length,

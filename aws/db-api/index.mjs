@@ -5,6 +5,7 @@
  * Routes:
  *   GET    /api/builds?page=1&per_page=10           — paginated builds list (public gallery)
  *   GET    /api/builds/:id                           — single build by ID
+ *   GET    /api/builds/:id/source                    — build source code (auth-gatable)
  *   GET    /api/data/:namespace/:key                 — raw key-value get (SingularityDB)
  *   POST   /api/data/:namespace/:key  {value}        — raw key-value put (SingularityDB)
  *   PUT    /api/data/:namespace/:key  {value}        — raw key-value put (SingularityDB)
@@ -19,7 +20,7 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = process.env.TABLE_NAME || "singularity-db";
 
 // System namespaces that cannot be written to via the public API
-const PROTECTED_NAMESPACES = new Set(["_system", "_builds", "_reply_queue", "_showcase", "_rejected", "_rate_limits"]);
+const PROTECTED_NAMESPACES = new Set(["_system", "_builds", "_source", "_reply_queue", "_showcase", "_rejected", "_rate_limits"]);
 
 function cors(body, status = 200) {
   return {
@@ -85,6 +86,7 @@ async function getBuilds(page, perPage, sort = "created_at", search = "") {
       score: v?.score || v?.coolness || 50,
       query: v?.query || v?.request || "",
       username: v?.username || "",
+      channel: v?.channel || "x",
       tweet_url: v?.tweetUrl || v?.tweet_url || "",
       build_url: v?.buildUrl || v?.build_url || v?.url || "",
     };
@@ -106,6 +108,7 @@ async function getBuild(id) {
     score: v?.score || v?.coolness || 50,
     query: v?.query || v?.request || "",
     username: v?.username || "",
+    channel: v?.channel || "x",
     tweet_url: v?.tweetUrl || v?.tweet_url || "",
     build_url: v?.buildUrl || v?.build_url || v?.url || "",
   };
@@ -173,6 +176,16 @@ export async function handler(event) {
       return cors(await getBuilds(page, perPage, sort, search));
     }
 
+    // GET /api/builds/:id/source — private source code (auth-gatable later)
+    const sourceMatch = path.match(/^\/api\/builds\/([^/]+)\/source\/?$/);
+    if (method === "GET" && sourceMatch) {
+      const buildId = decodeURIComponent(sourceMatch[1]);
+      const item = await getData("_source", buildId);
+      if (!item) return cors({ error: "Source not found" }, 404);
+      const v = unwrapValue(item.value);
+      return cors({ id: buildId, html: v?.html || v, htmlSize: v?.htmlSize || 0 });
+    }
+
     // GET /api/builds/:id
     const buildMatch = path.match(/^\/api\/builds\/([^/]+)\/?$/);
     if (method === "GET" && buildMatch) {
@@ -234,7 +247,7 @@ export async function handler(event) {
       })));
     }
 
-    return cors({ error: "Not found", routes: ["GET /api/builds", "GET /api/builds/:id", "GET /api/data/:ns/:key", "PUT /api/data/:ns/:key", "DELETE /api/data/:ns/:key", "GET /api/data/:ns"] }, 404);
+    return cors({ error: "Not found", routes: ["GET /api/builds", "GET /api/builds/:id", "GET /api/builds/:id/source", "GET /api/data/:ns/:key", "PUT /api/data/:ns/:key", "DELETE /api/data/:ns/:key", "GET /api/data/:ns"] }, 404);
   } catch (e) {
     console.error(e);
     return cors({ error: e.message }, 500);
