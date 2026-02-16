@@ -5,7 +5,7 @@
  */
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -46,16 +46,28 @@ async function isAlreadyBuilt(tweetId) {
 }
 
 async function getUserBuildCount(username) {
-  const result = await ddb.send(new QueryCommand({
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const rateLimitKey = `${username}:${today}`;
+  const result = await ddb.send(new GetCommand({
     TableName: TABLE,
-    KeyConditionExpression: "ns = :ns AND begins_with(#k, :prefix)",
-    ExpressionAttributeNames: { "#k": "key" },
-    ExpressionAttributeValues: { ":ns": "_builds", ":prefix": username },
+    Key: { ns: "_rate_limits", key: rateLimitKey },
   }));
-  // Check builds in last hour
-  const oneDayAgo = new Date(Date.now() - 86400000).toISOString();
-  const recent = (result.Items || []).filter(i => i.updatedAt > oneDayAgo);
-  return recent.length;
+  return result.Item?.value?.count || 0;
+}
+
+async function incrementUserBuildCount(username) {
+  const today = new Date().toISOString().slice(0, 10);
+  const rateLimitKey = `${username}:${today}`;
+  const current = await getUserBuildCount(username);
+  await ddb.send(new PutCommand({
+    TableName: TABLE,
+    Item: {
+      ns: "_rate_limits",
+      key: rateLimitKey,
+      value: { count: current + 1 },
+      updatedAt: new Date().toISOString(),
+    },
+  }));
 }
 
 // --- Trigger detection ---
@@ -259,6 +271,7 @@ export async function handler() {
         continue;
       }
 
+      await incrementUserBuildCount(reply.username);
       processed++;
       console.log(`✅ @${reply.username}: ${deployResult.appUrl}`);
     } catch (err) {

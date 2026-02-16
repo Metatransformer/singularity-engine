@@ -29,7 +29,7 @@ async function generateApp(request, appId) {
 
   const html = message.content[0]?.text;
 
-  if (!html || !html.includes("<!DOCTYPE html>") && !html.includes("<html")) {
+  if (!html || (!html.includes("<!DOCTYPE html>") && !html.includes("<html"))) {
     throw new Error("Claude did not generate valid HTML");
   }
 

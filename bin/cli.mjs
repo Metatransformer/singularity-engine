@@ -958,7 +958,7 @@ async function cmdStatus() {
       try {
         const scan = await ddb.send(new ScanCommand({
           TableName: tableName,
-          FilterExpression: "begins_with(pk, :ns)",
+          FilterExpression: "ns = :ns",
           ExpressionAttributeValues: { ":ns": { S: "_reply_queue" } },
           Select: "COUNT",
         }));
@@ -969,7 +969,7 @@ async function cmdStatus() {
       try {
         const scan = await ddb.send(new ScanCommand({
           TableName: tableName,
-          FilterExpression: "begins_with(pk, :ns)",
+          FilterExpression: "ns = :ns",
           ExpressionAttributeValues: { ":ns": { S: "_showcase" } },
           Select: "COUNT",
         }));

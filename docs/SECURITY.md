@@ -58,7 +58,7 @@ Tweets go through multiple layers before reaching Claude:
 - **Blocked content:** NSFW, weapons, drugs, hacking tools, phishing
 - **HTML stripping:** All HTML tags removed
 - **Character filtering:** Only safe characters allowed through
-- **Rate limiting:** 2 builds per user per hour
+- **Rate limiting:** 2 builds per user per day
 
 ### Layer 2: Claude System Prompt
 - Explicit rules forbidding dangerous code patterns
@@ -114,7 +114,7 @@ The db-api Lambda provides a key-value store for generated apps. Security measur
 
 | Limit | Value | Scope |
 |-------|-------|-------|
-| Builds per user per hour | 2 | Per X username |
+| Builds per user per day | 2 | Per X username |
 | Reply cooldown | 60 seconds | Global |
 | Tweet poll interval | 2 minutes | Global |
 | Max input length | 500 chars | Per request |

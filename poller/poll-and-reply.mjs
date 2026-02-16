@@ -37,40 +37,39 @@ function markLocalDone(queueKey) {
 
 async function fetchPendingReplies() {
   const res = await fetch(`${API}/_reply_queue`);
+  if (!res.ok) {
+    console.error(`  Failed to fetch reply queue: ${res.status}`);
+    return [];
+  }
+  // API returns [{key, value, updatedAt}, ...]
   const data = await res.json();
-  if (!data.keys?.length) return [];
+  if (!Array.isArray(data) || data.length === 0) return [];
 
   const items = [];
-  for (const k of data.keys) {
-    if (isDone(k.key)) continue;
-    const r = await fetch(`${API}/_reply_queue/${k.key}`);
-    const d = await r.json();
-    if (d.value) {
-      // Skip showcase items (those are pre-built, not real tweet replies)
-      if (d.value.tweetId === "showcase") {
-        markLocalDone(k.key);
-        continue;
-      }
-      items.push({ queueKey: k.key, ...d.value });
+  for (const item of data) {
+    if (isDone(item.key)) continue;
+    const val = item.value;
+    if (!val) continue;
+    // Skip already-done items
+    if (val.repliedAt || item.status === "done") {
+      markLocalDone(item.key);
+      continue;
     }
+    // Skip showcase items (those are pre-built, not real tweet replies)
+    if (val.tweetId === "showcase") {
+      markLocalDone(item.key);
+      continue;
+    }
+    items.push({ queueKey: item.key, ...val });
   }
   return items;
 }
 
 async function markDone(queueKey) {
   markLocalDone(queueKey);
-  // Also update in DynamoDB
-  try {
-    const res = await fetch(`${API}/_reply_queue/${queueKey}`);
-    const data = await res.json();
-    await fetch(`${API}/_reply_queue/${queueKey}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: { ...data.value, repliedAt: new Date().toISOString() }, status: "done" }),
-    });
-  } catch (err) {
-    console.log(`  ⚠️ DynamoDB update failed (local marked done): ${err.message}`);
-  }
+  // Note: _reply_queue is a protected namespace — can't write via public API.
+  // The local done file prevents re-processing. Items remain in DynamoDB
+  // for audit purposes.
 }
 
 async function replyViaXApi(item) {
