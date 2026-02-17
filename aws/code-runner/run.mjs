@@ -1,11 +1,12 @@
 /**
- * Sandboxed Claude Code Runner
- * Runs inside Docker container. Generates a single HTML file from a build request.
+ * Singularity Engine — Code Runner
+ * Generates a single HTML file from a build request.
  * 
  * Input: BUILD_REQUEST env var (sanitized tweet text)
  * Output: writes HTML to /output/index.html
  * 
  * Can also run as Lambda handler (for simpler deployment).
+ * Build engine is configurable via BUILD_ENGINE env var.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -13,7 +14,17 @@ import { writeFileSync, mkdirSync } from "fs";
 import { CODE_RUNNER_SYSTEM_PROMPT, buildUserPrompt, buildSingularityDBScript, SINGULARITY_DB_URL } from "./shared/prompts.mjs";
 import { scanGeneratedCode } from "./shared/security.mjs";
 
-const client = new Anthropic();
+// Build tool is configurable — never hardcode tool names in output
+const BUILD_ENGINE = process.env.BUILD_ENGINE || "default";
+
+// Auth: prefer OAuth session token, fall back to API key
+const authConfig = {};
+if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+  authConfig.apiKey = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+} else if (process.env.ANTHROPIC_API_KEY) {
+  authConfig.apiKey = process.env.ANTHROPIC_API_KEY;
+}
+const client = new Anthropic(authConfig);
 
 async function generateApp(request, appId) {
   console.log(`🔨 Building: "${request}" (namespace: ${appId})`);

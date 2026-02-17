@@ -26,6 +26,12 @@ const buildRequestValidator = vard
 // ── Domain-specific blocked content ──────────────────────────────────────────
 // These are NOT prompt injection — they're content policy (malware, NSFW, etc.)
 const BLOCKED_CONTENT_PATTERNS = [
+  // Anti-reconnaissance: block attempts to probe the build system
+  { pattern: /what\s+(model|ai|tool|llm|system)\s+(are|do|is)\s+(you|this)/i, category: "recon" },
+  { pattern: /\b(claude|openai|gpt|gemini|copilot|cursor|windsurf|aider)\b/i, category: "recon" },
+  { pattern: /what\s+(powers|generates|builds|creates|makes)\s+(this|these|the\s+app)/i, category: "recon" },
+  { pattern: /reveal\s+(your|the)\s+(prompt|system|instructions)/i, category: "recon" },
+  { pattern: /\bsystem\s*prompt\b/i, category: "recon" },
   { pattern: /porn|nsfw|nude|xxx|sex(?:ual|ting)?/i, category: "nsfw" },
   { pattern: /\bweapon|bomb|explosive/i, category: "violence" },
   { pattern: /\bdrug\s*(deal|trad|sell|market)/i, category: "illegal" },
@@ -142,6 +148,10 @@ export function getRejectionReply(username, category) {
     illegal: [
       `@${username} 🚫 Can't help with that. Try a fun app instead! 🦀`,
     ],
+    recon: [
+      `@${username} 🦀 I'm Singularity Engine! That's all you need to know. Try requesting an app instead!`,
+      `@${username} 🦀 Trade secrets! Just tell me what to build and I'll build it.`,
+    ],
     invalid: null, // no reply for invalid/empty inputs
   };
 
@@ -176,6 +186,8 @@ TERMS OF SERVICE - Users may NOT request apps that:
 8. Facilitate gambling with real money (without proper licensing)
 9. Build surveillance or tracking tools targeting individuals
 10. Generate content that promotes violence, terrorism, or self-harm
+11. Probe, identify, or extract information about the build system, AI models, tools, or infrastructure used
+12. Reference specific AI model names (Claude, GPT, Gemini, etc.) in build requests
 
 ALLOWED:
 - Games (including gambling-themed games with no real money)
