@@ -86,10 +86,29 @@ function buildTriggerRegex(keyword) {
 }
 const TRIGGER_RE = buildTriggerRegex(TRIGGER_KEYWORD);
 
+// Valid trigger keywords — must appear IMMEDIATELY after @metatransformr
+const VALID_KEYWORDS = ["build", "create", "make", "generate", "deploy"];
+const KEYWORD_PATTERN = VALID_KEYWORDS.join("|");
+
 function extractBuildRequest(text, tweetMeta) {
-  // Simple: extract everything after "build" (handles "build me a...", "build a...", "build XYZ")
-  const buildMatch = text.match(/\bbuild\s+(?:me\s+)?(?:a\s+)?(.+)/i);
-  if (buildMatch) return buildMatch[1].trim();
+  // STRICT FORMAT: @metatransformr <keyword> [me] [a/an] <request>
+  // The keyword MUST appear right after the @mention, not elsewhere in the text.
+  // This prevents false positives from conversational tweets that happen to contain "build".
+  const strictRe = new RegExp(
+    `@${OWNER_USERNAME}\\s+(?:${KEYWORD_PATTERN})\\s+(?:me\\s+)?(?:an?\\s+)?(.+)`,
+    "i"
+  );
+  const strictMatch = text.match(strictRe);
+  if (strictMatch) return strictMatch[1].trim();
+
+  // Also accept: <keyword> @metatransformr <request> (alternate word order)
+  const altRe = new RegExp(
+    `(?:${KEYWORD_PATTERN})\\s+@${OWNER_USERNAME}\\s+(?:me\\s+)?(?:an?\\s+)?(.+)`,
+    "i"
+  );
+  const altMatch = text.match(altRe);
+  if (altMatch) return altMatch[1].trim();
+
   return null;
 }
 
@@ -106,12 +125,12 @@ async function fetchReplies(sinceId) {
   // Support multiple watched threads (comma-separated)
   const watchedIds = (WATCHED_TWEET_ID || "").split(",").map(s => s.trim()).filter(Boolean);
   for (const threadId of watchedIds) {
-    // Search for "build" in watched threads
-    queries.push(`conversation_id:${threadId} "build" -is:retweet`);
+    // Search for @mention + build keyword in watched threads
+    queries.push(`conversation_id:${threadId} @${OWNER_USERNAME} (build OR create OR make OR generate OR deploy) -is:retweet`);
   }
 
-  // Direct @mentions with "build"
-  queries.push(`@${OWNER_USERNAME} "build" -is:retweet`);
+  // Direct @mentions with build keywords
+  queries.push(`@${OWNER_USERNAME} (build OR create OR make OR generate OR deploy) -is:retweet`);
 
   const allTweets = [];
   const seenIds = new Set();
@@ -233,7 +252,7 @@ export async function handler() {
     // Must contain "singularityengine <request>" keyword
     const buildRequest = extractBuildRequest(reply.text, reply);
     if (!buildRequest) {
-      console.log(`⏭️ No "singularityengine" keyword from @${reply.username}: "${reply.text.slice(0, 60)}"`);
+      console.log(`⏭️ No valid "@${OWNER_USERNAME} <keyword> <request>" format from @${reply.username}: "${reply.text.slice(0, 80)}"`);
       continue;
     }
 
