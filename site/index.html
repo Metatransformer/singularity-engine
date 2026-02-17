@@ -3,170 +3,531 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Singularity Engine — Tweet it. Build it. Ship it.</title>
-<meta name="description" content="Autonomous tweet-to-app pipeline. Tweet a request, AI builds it in 45 seconds, deploys live, replies with link.">
+<title>Singularity Engine — Tweet an idea. Get a working app.</title>
+<meta name="description" content="Autonomous tweet-to-app pipeline. Reply to @metatransformr with your idea → AI builds it in 45 seconds → deploys live → replies with the link.">
+<meta property="og:title" content="Singularity Engine — Tweet an idea. Get a working app.">
+<meta property="og:description" content="Autonomous AI pipeline that turns tweets into live web apps in under 60 seconds.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://singularityengine.ai">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0a0a0a;--surface:#111;--border:#1a1a1a;--cyan:#00d4ff;--cyan2:#00a8cc;--text:#e0e0e0;--muted:#666;--glow:0 0 30px rgba(0,212,255,.15)}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;line-height:1.6}
-a{color:var(--cyan);text-decoration:none;transition:opacity .2s}a:hover{opacity:.8}
+:root{
+  --bg:#0a0a0a;--surface:#0f0f0f;--surface2:#141414;--border:#1a1a1a;--border2:#252525;
+  --cyan:#00d4ff;--cyan-dim:rgba(0,212,255,.08);--cyan-glow:rgba(0,212,255,.15);
+  --purple:#7b2fff;--purple-dim:rgba(123,47,255,.08);
+  --green:#00ff88;--green-dim:rgba(0,255,136,.08);
+  --text:#e0e0e0;--text-bright:#fff;--muted:#666;--muted2:#444;
+  --glow:0 0 40px rgba(0,212,255,.12);--glow-strong:0 0 60px rgba(0,212,255,.2);
+  --font:'Inter',system-ui,-apple-system,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:var(--bg);color:var(--text);overflow-x:hidden;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--cyan);text-decoration:none;transition:all .2s}a:hover{opacity:.85}
+::selection{background:rgba(0,212,255,.25);color:#fff}
 
-/* Grid background */
-.grid-bg{position:fixed;inset:0;z-index:0;opacity:.08;
-  background-image:linear-gradient(rgba(0,212,255,.3) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.3) 1px,transparent 1px);
-  background-size:60px 60px;pointer-events:none}
-
-/* Glow orb */
-.orb{position:fixed;width:600px;height:600px;border-radius:50%;filter:blur(120px);opacity:.12;pointer-events:none;z-index:0}
-.orb-1{top:-200px;left:-100px;background:var(--cyan)}
-.orb-2{bottom:-200px;right:-100px;background:#7b2fff}
+/* ── Background Effects ── */
+.grid-bg{position:fixed;inset:0;z-index:0;opacity:.04;
+  background-image:linear-gradient(rgba(0,212,255,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.5) 1px,transparent 1px);
+  background-size:80px 80px;pointer-events:none}
+.noise{position:fixed;inset:0;z-index:0;opacity:.015;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.orb{position:fixed;border-radius:50%;filter:blur(140px);pointer-events:none;z-index:0}
+.orb-1{width:700px;height:700px;top:-300px;left:-200px;background:var(--cyan);opacity:.07}
+.orb-2{width:500px;height:500px;bottom:-200px;right:-150px;background:var(--purple);opacity:.06}
+.orb-3{width:400px;height:400px;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--cyan);opacity:.03}
 
 section{position:relative;z-index:1}
-.container{max-width:1100px;margin:0 auto;padding:0 24px}
+.container{max-width:1140px;margin:0 auto;padding:0 28px}
 
-/* Hero */
-.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:80px 24px 60px}
-.hero h1{font-size:clamp(2.5rem,7vw,5rem);font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:20px}
-.hero h1 .accent{background:linear-gradient(135deg,var(--cyan),#7b2fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.hero .sub{font-size:clamp(1rem,2.5vw,1.35rem);color:var(--muted);max-width:600px;margin:0 auto 40px}
-.hero .cta{display:inline-flex;gap:16px;flex-wrap:wrap;justify-content:center}
-.btn{display:inline-block;padding:14px 32px;border-radius:10px;font-weight:600;font-size:1rem;transition:all .25s}
-.btn-primary{background:var(--cyan);color:#000}.btn-primary:hover{background:#00e8ff;box-shadow:var(--glow)}
-.btn-ghost{border:1px solid #333;color:var(--text)}.btn-ghost:hover{border-color:var(--cyan);color:var(--cyan)}
+/* ── Navigation ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:16px 28px;
+  background:rgba(10,10,10,.8);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.04);
+  display:flex;align-items:center;justify-content:space-between;transition:all .3s}
+nav.scrolled{background:rgba(10,10,10,.95);border-bottom-color:rgba(255,255,255,.08)}
+.nav-logo{font-weight:800;font-size:1.1rem;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+.nav-logo .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan);animation:pulse-dot 2s ease-in-out infinite}
+@keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 12px var(--cyan)}50%{opacity:.6;box-shadow:0 0 20px var(--cyan)}}
+.nav-links{display:flex;gap:28px;align-items:center}
+.nav-links a{color:var(--muted);font-size:.88rem;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--text-bright);opacity:1}
+.nav-counter{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:.85rem;color:var(--cyan);
+  background:var(--cyan-dim);padding:6px 14px;border-radius:8px;border:1px solid rgba(0,212,255,.15)}
+.nav-counter .count{font-weight:700;min-width:24px}
+.mobile-menu{display:none;background:none;border:none;color:var(--text);font-size:1.5rem;cursor:pointer}
 
-/* Tweet demo */
-.tweet-demo{margin:50px auto 0;max-width:520px;background:#111;border:1px solid #222;border-radius:16px;padding:20px 24px;text-align:left;font-size:.95rem}
-.tweet-demo .handle{color:var(--cyan);font-weight:600}.tweet-demo .body{margin:8px 0;color:#ccc}
-.tweet-demo .reply{margin-top:14px;padding-top:14px;border-top:1px solid #1a1a1a;color:var(--muted);font-size:.85rem}
-.tweet-demo .reply b{color:var(--cyan)}
-.typing{display:inline-block;overflow:hidden;white-space:nowrap;border-right:2px solid var(--cyan);animation:typing 3s steps(44) infinite,blink .7s step-end infinite}
-@keyframes typing{0%,100%{width:0}50%,80%{width:100%}}
-@keyframes blink{50%{border-color:transparent}}
+/* ── Hero ── */
+.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:120px 28px 80px;position:relative}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--cyan-dim);border:1px solid rgba(0,212,255,.15);
+  padding:8px 18px;border-radius:100px;font-size:.82rem;color:var(--cyan);font-weight:500;margin-bottom:28px;
+  animation:fadeInUp .6s ease-out}
+.hero-badge .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse-dot 1.5s ease-in-out infinite}
+.hero h1{font-size:clamp(2.8rem,8vw,5.5rem);font-weight:900;letter-spacing:-.04em;line-height:1.05;margin-bottom:24px;
+  animation:fadeInUp .6s ease-out .1s both}
+.hero h1 .accent{background:linear-gradient(135deg,var(--cyan),#00ffcc,var(--purple));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;background-size:200% 200%;
+  animation:gradientShift 4s ease-in-out infinite}
+@keyframes gradientShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.hero .sub{font-size:clamp(1rem,2.5vw,1.3rem);color:var(--muted);max-width:560px;margin:0 auto 40px;line-height:1.7;
+  animation:fadeInUp .6s ease-out .2s both}
+.hero .cta{display:inline-flex;gap:14px;flex-wrap:wrap;justify-content:center;animation:fadeInUp .6s ease-out .3s both}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 30px;border-radius:12px;font-weight:600;font-size:.95rem;
+  transition:all .3s;border:none;cursor:pointer;font-family:var(--font)}
+.btn-primary{background:linear-gradient(135deg,var(--cyan),#00b8d4);color:#000}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:var(--glow-strong);opacity:1}
+.btn-ghost{border:1px solid var(--border2);color:var(--text);background:transparent}
+.btn-ghost:hover{border-color:var(--cyan);color:var(--cyan);transform:translateY(-2px);opacity:1}
 
-/* How it works */
-.how{padding:100px 0}
-.how h2{text-align:center;font-size:2rem;margin-bottom:60px;font-weight:700}
-.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px}
-.step{background:rgba(255,255,255,.02);border:1px solid #1a1a1a;border-radius:14px;padding:28px;text-align:center;transition:border-color .3s,transform .3s}
-.step:hover{border-color:var(--cyan);transform:translateY(-4px)}
-.step .icon{font-size:2.2rem;margin-bottom:12px}
-.step h3{font-size:1.05rem;margin-bottom:8px;font-weight:600}
-.step p{color:var(--muted);font-size:.88rem;line-height:1.5}
-.step-num{display:inline-block;background:var(--cyan);color:#000;width:28px;height:28px;border-radius:50%;font-weight:700;font-size:.8rem;line-height:28px;margin-bottom:10px}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
 
-/* Gallery */
-.gallery{padding:80px 0}
-.gallery h2{text-align:center;font-size:2rem;margin-bottom:12px;font-weight:700}
-.gallery .subtitle{text-align:center;color:var(--muted);margin-bottom:40px}
-.builds-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
-.build-card{background:rgba(255,255,255,.03);border:1px solid #1a1a1a;border-radius:14px;padding:22px;transition:all .3s;cursor:pointer;position:relative;overflow:hidden}
-.build-card:hover{border-color:var(--cyan);transform:translateY(-3px);box-shadow:var(--glow)}
-.build-card .name{font-weight:600;font-size:1.05rem;margin-bottom:6px;display:flex;align-items:center;gap:8px}
-.build-card .query{color:var(--muted);font-size:.85rem;margin-bottom:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.build-card .meta{display:flex;justify-content:space-between;align-items:center;font-size:.8rem;color:var(--muted)}
-.score{background:rgba(0,212,255,.12);color:var(--cyan);padding:3px 10px;border-radius:20px;font-weight:600;font-size:.78rem}
-.builds-loading{text-align:center;color:var(--muted);padding:60px 0}
+/* ── Pipeline Diagram ── */
+.pipeline{margin:60px auto 0;max-width:720px;animation:fadeInUp .6s ease-out .4s both}
+.pipeline-track{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap}
+.pipe-node{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 12px;min-width:100px}
+.pipe-icon{width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.6rem;
+  border:1px solid var(--border2);background:var(--surface2);transition:all .4s;position:relative}
+.pipe-icon::after{content:'';position:absolute;inset:-2px;border-radius:16px;background:linear-gradient(135deg,var(--cyan),var(--purple));
+  opacity:0;z-index:-1;transition:opacity .4s}
+.pipe-node:hover .pipe-icon{border-color:transparent;transform:translateY(-4px)}
+.pipe-node:hover .pipe-icon::after{opacity:1}
+.pipe-label{font-size:.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.pipe-arrow{color:var(--muted2);font-size:1.2rem;padding:0 2px;margin-top:-12px}
+.pipe-time{font-family:var(--mono);font-size:.65rem;color:var(--cyan);opacity:.7;margin-top:-2px}
 
-/* Deploy */
-.deploy{padding:80px 0;text-align:center}
-.deploy h2{font-size:2rem;margin-bottom:16px;font-weight:700}
-.deploy .desc{color:var(--muted);max-width:560px;margin:0 auto 30px;font-size:1.05rem}
-.code-block{background:#111;border:1px solid #222;border-radius:12px;padding:18px 24px;max-width:600px;margin:0 auto 24px;font-family:'SF Mono',Monaco,Consolas,monospace;font-size:.9rem;color:var(--cyan);text-align:left;position:relative;overflow-x:auto}
-.code-block .copy{position:absolute;top:12px;right:12px;background:#222;border:none;color:#888;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:.75rem;transition:color .2s}.code-block .copy:hover{color:var(--cyan)}
+/* ── Stats Bar ── */
+.stats-bar{padding:40px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-top:-1px}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center}
+.stat{padding:16px}
+.stat-value{font-size:clamp(1.8rem,4vw,2.5rem);font-weight:800;font-family:var(--mono);
+  background:linear-gradient(135deg,var(--cyan),#00ffcc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.stat-label{font-size:.8rem;color:var(--muted);margin-top:4px;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
 
-/* Footer */
-footer{padding:40px 0;border-top:1px solid #111;text-align:center;color:var(--muted);font-size:.85rem}
-footer .links{display:flex;gap:24px;justify-content:center;margin-bottom:12px;flex-wrap:wrap}
+/* ── Section Headers ── */
+.section-header{text-align:center;margin-bottom:56px}
+.section-header .tag{display:inline-block;font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--cyan);background:var(--cyan-dim);padding:6px 16px;border-radius:100px;margin-bottom:16px}
+.section-header h2{font-size:clamp(1.8rem,4vw,2.8rem);font-weight:800;letter-spacing:-.03em;margin-bottom:12px}
+.section-header p{color:var(--muted);font-size:1.05rem;max-width:540px;margin:0 auto;line-height:1.7}
 
-@media(max-width:640px){
-  .hero h1{font-size:2.2rem}
+/* ── How to Use ── */
+.howto{padding:100px 0}
+.howto-content{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
+.howto-steps{display:flex;flex-direction:column;gap:28px}
+.howto-step{display:flex;gap:18px;align-items:flex-start;padding:20px;border-radius:14px;border:1px solid transparent;transition:all .3s}
+.howto-step:hover{background:var(--surface2);border-color:var(--border)}
+.howto-num{flex-shrink:0;width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:.85rem;background:var(--cyan-dim);color:var(--cyan);border:1px solid rgba(0,212,255,.2)}
+.howto-step h3{font-size:1rem;font-weight:700;margin-bottom:4px}
+.howto-step p{color:var(--muted);font-size:.88rem;line-height:1.6}
+.tweet-mockup{background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:28px;position:relative;overflow:hidden}
+.tweet-mockup::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
+.tweet-avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),var(--purple));
+  display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;color:#000}
+.tweet-header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.tweet-name{font-weight:700;font-size:.95rem}
+.tweet-handle{color:var(--muted);font-size:.85rem}
+.tweet-body{font-size:1rem;line-height:1.6;margin-bottom:18px}
+.tweet-body .cmd{color:var(--cyan);font-weight:600}
+.tweet-reply{border-top:1px solid var(--border);padding-top:18px;display:flex;gap:12px;align-items:flex-start}
+.tweet-reply-avatar{width:36px;height:36px;border-radius:50%;background:var(--cyan);display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+.tweet-reply-body{font-size:.9rem;color:var(--muted);line-height:1.6}
+.tweet-reply-body b{color:var(--cyan)}
+.tweet-reply-body a{color:var(--cyan);font-family:var(--mono);font-size:.82rem}
+.tweet-time{font-size:.75rem;color:var(--muted2);margin-top:8px}
+
+/* ── Showcase / Scoreboard ── */
+.showcase{padding:100px 0}
+.search-bar{max-width:480px;margin:0 auto 40px;position:relative}
+.search-bar input{width:100%;padding:14px 20px 14px 48px;border-radius:14px;border:1px solid var(--border2);
+  background:var(--surface);color:var(--text);font-size:.95rem;font-family:var(--font);outline:none;transition:all .3s}
+.search-bar input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,212,255,.08)}
+.search-bar input::placeholder{color:var(--muted2)}
+.search-bar svg{position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.builds-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px}
+.build-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;
+  transition:all .35s;cursor:pointer;position:relative;overflow:hidden;text-decoration:none;color:inherit;display:block}
+.build-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--cyan),var(--purple));opacity:0;transition:opacity .3s}
+.build-card:hover{border-color:rgba(0,212,255,.3);transform:translateY(-4px);box-shadow:var(--glow);opacity:1}
+.build-card:hover::before{opacity:1}
+.build-name{font-weight:700;font-size:1rem;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.build-query{color:var(--muted);font-size:.84rem;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.5}
+.build-meta{display:flex;justify-content:space-between;align-items:center;font-size:.8rem}
+.build-user{color:var(--muted);display:flex;align-items:center;gap:6px}
+.build-user::before{content:'@';color:var(--cyan);font-weight:600}
+.score-badge{background:linear-gradient(135deg,var(--cyan-dim),var(--purple-dim));color:var(--cyan);
+  padding:4px 12px;border-radius:100px;font-weight:700;font-size:.78rem;font-family:var(--mono);
+  border:1px solid rgba(0,212,255,.15)}
+.build-link{color:var(--cyan);font-size:.78rem;font-weight:500;display:flex;align-items:center;gap:4px}
+.builds-loading{text-align:center;color:var(--muted);padding:80px 0;font-size:.95rem}
+.builds-empty{text-align:center;color:var(--muted);padding:60px 0}
+
+/* ── Architecture ── */
+.architecture{padding:100px 0}
+.arch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px}
+.arch-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;transition:all .35s;position:relative;overflow:hidden}
+.arch-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--cyan),transparent);opacity:0;transition:opacity .3s}
+.arch-card:hover{border-color:rgba(0,212,255,.2);transform:translateY(-3px)}
+.arch-card:hover::before{opacity:1}
+.arch-icon{font-size:2rem;margin-bottom:14px}
+.arch-card h3{font-size:1rem;font-weight:700;margin-bottom:8px}
+.arch-card p{color:var(--muted);font-size:.85rem;line-height:1.6}
+.arch-card .tech{display:inline-block;font-family:var(--mono);font-size:.7rem;color:var(--cyan);background:var(--cyan-dim);
+  padding:3px 10px;border-radius:6px;margin-top:10px}
+
+/* ── Footer ── */
+footer{padding:60px 0 40px;border-top:1px solid var(--border)}
+.footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:40px;margin-bottom:40px}
+.footer-brand h3{font-size:1.1rem;font-weight:800;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.footer-brand h3 .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.footer-brand p{color:var(--muted);font-size:.85rem;line-height:1.7;max-width:320px}
+.footer-col h4{font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:16px;font-weight:600}
+.footer-col a{display:block;color:var(--muted);font-size:.88rem;padding:4px 0;transition:color .2s}
+.footer-col a:hover{color:var(--cyan);opacity:1}
+.footer-bottom{border-top:1px solid var(--border);padding-top:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.footer-bottom p{color:var(--muted2);font-size:.8rem}
+.footer-bottom a{color:var(--muted);font-size:.8rem}
+
+/* ── Animations ── */
+.fade-in{opacity:0;transform:translateY(30px);transition:all .7s cubic-bezier(.16,1,.3,1)}
+.fade-in.visible{opacity:1;transform:translateY(0)}
+
+/* ── Mobile ── */
+@media(max-width:768px){
+  .nav-links{display:none}
+  .mobile-menu{display:block}
+  .nav-links.open{display:flex;flex-direction:column;position:absolute;top:100%;left:0;right:0;
+    background:rgba(10,10,10,.98);padding:20px 28px;gap:16px;border-bottom:1px solid var(--border)}
+  .hero h1{font-size:2.4rem}
+  .hero{padding:100px 20px 60px}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:16px}
+  .howto-content{grid-template-columns:1fr;gap:40px}
   .builds-grid{grid-template-columns:1fr}
-  .steps{grid-template-columns:1fr 1fr}
+  .arch-grid{grid-template-columns:1fr 1fr}
+  .footer-grid{grid-template-columns:1fr;gap:28px}
+  .footer-bottom{flex-direction:column;text-align:center}
+  .pipeline-track{gap:0}
+  .pipe-node{min-width:70px;padding:10px 6px}
+  .pipe-icon{width:44px;height:44px;font-size:1.2rem}
+  .pipe-arrow{font-size:.9rem}
+}
+@media(max-width:480px){
+  .hero h1{font-size:2rem}
+  .arch-grid{grid-template-columns:1fr}
+  .pipe-node{min-width:60px;padding:8px 4px}
+  .pipe-label{font-size:.62rem}
 }
 </style>
 </head>
 <body>
+
 <div class="grid-bg"></div>
+<div class="noise"></div>
 <div class="orb orb-1"></div>
 <div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
 
+<!-- Nav -->
+<nav id="nav">
+  <div class="nav-logo"><span class="dot"></span> Singularity Engine</div>
+  <div class="nav-links" id="navLinks">
+    <a href="#howto">How It Works</a>
+    <a href="#showcase">Builds</a>
+    <a href="#architecture">Architecture</a>
+    <a href="https://github.com/Metatransformer/singularity-engine" target="_blank">GitHub</a>
+    <div class="nav-counter"><span class="dot" style="width:5px;height:5px"></span> <span class="count" id="navCount">—</span> builds</div>
+  </div>
+  <button class="mobile-menu" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Menu">☰</button>
+</nav>
+
+<!-- Hero -->
 <section class="hero">
   <div>
-    <h1>Tweet it. <span class="accent">Build it.</span> Ship it.</h1>
-    <p class="sub">Autonomous tweet-to-app pipeline. Tweet a request → AI builds it in 45 seconds → deploys live → replies with the link.</p>
+    <div class="hero-badge"><span class="live-dot"></span> Live on X — building apps right now</div>
+    <h1>Tweet an idea.<br><span class="accent">Get a working app.</span></h1>
+    <p class="sub">Reply to <strong>@metatransformr</strong> with your idea. AI builds it in under 60 seconds. Deployed live. Link in your replies.</p>
     <div class="cta">
       <a href="https://x.com/metatransformr" target="_blank" class="btn btn-primary">Try on X →</a>
-      <a href="https://github.com/Metatransformer/singularity-engine" target="_blank" class="btn btn-ghost">Deploy Your Own</a>
+      <a href="#showcase" class="btn btn-ghost">See Builds ↓</a>
     </div>
-    <div class="tweet-demo">
-      <div class="handle">@you</div>
-      <div class="body"><span class="typing">SingularityEngine build me a tetris game with neon visuals</span></div>
-      <div class="reply">🤖 <b>@metatransformr</b> replied in 42s — your app is live!<br><a href="#">→ singularity-builds.metatransformer.github.io/...</a></div>
+
+    <!-- Pipeline Diagram -->
+    <div class="pipeline">
+      <div class="pipeline-track">
+        <div class="pipe-node">
+          <div class="pipe-icon">🐦</div>
+          <div class="pipe-label">Tweet</div>
+          <div class="pipe-time">0s</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node">
+          <div class="pipe-icon">🛡️</div>
+          <div class="pipe-label">Sanitize</div>
+          <div class="pipe-time">~2s</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node">
+          <div class="pipe-icon">🧠</div>
+          <div class="pipe-label">Claude</div>
+          <div class="pipe-time">~30s</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node">
+          <div class="pipe-icon">✅</div>
+          <div class="pipe-label">Score</div>
+          <div class="pipe-time">~5s</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node">
+          <div class="pipe-icon">🚀</div>
+          <div class="pipe-label">Deploy</div>
+          <div class="pipe-time">~8s</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node">
+          <div class="pipe-icon">💬</div>
+          <div class="pipe-label">Reply</div>
+          <div class="pipe-time">~45s</div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
 
-<section class="how">
+<!-- Stats Bar -->
+<section class="stats-bar">
   <div class="container">
-    <h2>How It Works</h2>
-    <div class="steps">
-      <div class="step"><div class="step-num">1</div><div class="icon">🐦</div><h3>Tweet</h3><p>Reply to a thread or @mention with "SingularityEngine" + your app idea</p></div>
-      <div class="step"><div class="step-num">2</div><div class="icon">🛡️</div><h3>Sanitize</h3><p>Prompt injection detection, content filtering, and rate limiting keep it safe</p></div>
-      <div class="step"><div class="step-num">3</div><div class="icon">🧠</div><h3>Claude Builds</h3><p>Claude generates a complete single-file app with persistence via SingularityDB</p></div>
-      <div class="step"><div class="step-num">4</div><div class="icon">🚀</div><h3>Deploy</h3><p>Pushed to GitHub Pages instantly. You get the live link in a reply.</p></div>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-value" id="totalBuilds">—</div><div class="stat-label">Apps Built</div></div>
+      <div class="stat"><div class="stat-value">&lt;60s</div><div class="stat-label">Avg Build Time</div></div>
+      <div class="stat"><div class="stat-value">100%</div><div class="stat-label">Autonomous</div></div>
+      <div class="stat"><div class="stat-value">∞</div><div class="stat-label">Possibilities</div></div>
     </div>
   </div>
 </section>
 
-<section class="gallery">
+<!-- How to Use -->
+<section class="howto" id="howto">
   <div class="container">
-    <h2>Live Builds</h2>
-    <p class="subtitle">Every app below was built by AI in under 60 seconds. No human touched the code.</p>
+    <div class="section-header fade-in">
+      <div class="tag">How to Use</div>
+      <h2>Three steps. Zero setup.</h2>
+      <p>No accounts, no installs, no config. Just tweet.</p>
+    </div>
+    <div class="howto-content">
+      <div class="howto-steps fade-in">
+        <div class="howto-step">
+          <div class="howto-num">1</div>
+          <div>
+            <h3>Reply to @metatransformr</h3>
+            <p>Tweet or reply with <strong>"build [your idea]"</strong> — describe any app you want in plain English.</p>
+          </div>
+        </div>
+        <div class="howto-step">
+          <div class="howto-num">2</div>
+          <div>
+            <h3>AI builds your app</h3>
+            <p>Claude generates a complete, working app with persistence via SingularityDB. Takes about 45 seconds.</p>
+          </div>
+        </div>
+        <div class="howto-step">
+          <div class="howto-num">3</div>
+          <div>
+            <h3>Get your live link</h3>
+            <p>Your app deploys to GitHub Pages instantly. We reply to your tweet with the live URL.</p>
+          </div>
+        </div>
+      </div>
+      <div class="tweet-mockup fade-in">
+        <div class="tweet-header">
+          <div class="tweet-avatar">Y</div>
+          <div><div class="tweet-name">You</div><div class="tweet-handle">@yourhandle</div></div>
+        </div>
+        <div class="tweet-body">
+          <span class="cmd">@metatransformr</span> build me a retro snake game with neon visuals and a leaderboard
+        </div>
+        <div class="tweet-reply">
+          <div class="tweet-reply-avatar">🤖</div>
+          <div>
+            <div class="tweet-reply-body">
+              <b>@metatransformr</b> · 42s<br>
+              ✅ Built & deployed! Score: 85/100<br>
+              <a href="#">→ metatransformer.github.io/singularity-builds/...</a>
+            </div>
+          </div>
+        </div>
+        <div class="tweet-time">Just now · Singularity Engine</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Showcase -->
+<section class="showcase" id="showcase">
+  <div class="container">
+    <div class="section-header fade-in">
+      <div class="tag">Showcase</div>
+      <h2>Built by AI. In seconds.</h2>
+      <p>Every app below was generated from a single tweet. No human touched the code.</p>
+    </div>
+    <div class="search-bar fade-in">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="searchInput" placeholder="Search by username or app name..." autocomplete="off">
+    </div>
     <div class="builds-grid" id="builds">
       <div class="builds-loading">Loading builds...</div>
     </div>
   </div>
 </section>
 
-<section class="deploy">
+<!-- Architecture -->
+<section class="architecture" id="architecture">
   <div class="container">
-    <h2>Deploy Your Own</h2>
-    <p class="desc">Run your own Singularity Engine in minutes. Open source, serverless, scales to zero.</p>
-    <div class="code-block">
-      <button class="copy" onclick="navigator.clipboard.writeText('curl -fsSL https://raw.githubusercontent.com/Metatransformer/singularity-engine/main/bin/install.sh | bash')">copy</button>
-      curl -fsSL https://raw.githubusercontent.com/Metatransformer/singularity-engine/main/bin/install.sh | bash
+    <div class="section-header fade-in">
+      <div class="tag">Architecture</div>
+      <h2>Serverless. Scalable. Open source.</h2>
+      <p>Four Lambda functions, one DynamoDB table, GitHub Pages for hosting. Scales to zero.</p>
     </div>
-    <a href="https://github.com/Metatransformer/singularity-engine" target="_blank" class="btn btn-ghost">View on GitHub</a>
+    <div class="arch-grid fade-in">
+      <div class="arch-card">
+        <div class="arch-icon">👂</div>
+        <h3>Poller Lambda</h3>
+        <p>Watches X for mentions and triggers the build pipeline. Handles deduplication and rate limiting.</p>
+        <span class="tech">EventBridge → Lambda</span>
+      </div>
+      <div class="arch-card">
+        <div class="arch-icon">🧠</div>
+        <h3>Builder Lambda</h3>
+        <p>Sends the prompt to Claude, receives a complete app, runs quality scoring, and validates output.</p>
+        <span class="tech">Claude API → Lambda</span>
+      </div>
+      <div class="arch-card">
+        <div class="arch-icon">🚀</div>
+        <h3>Deployer Lambda</h3>
+        <p>Commits the built app to a GitHub Pages repo and triggers deployment. Live in seconds.</p>
+        <span class="tech">GitHub API → Pages</span>
+      </div>
+      <div class="arch-card">
+        <div class="arch-icon">💬</div>
+        <h3>Replier Lambda</h3>
+        <p>Tweets back the live link, score, and build status. Closes the loop in under 60 seconds.</p>
+        <span class="tech">X API → Reply</span>
+      </div>
+      <div class="arch-card">
+        <div class="arch-icon">🗄️</div>
+        <h3>DynamoDB</h3>
+        <p>Stores build metadata, scores, user history, and rate limit state. Single-table design.</p>
+        <span class="tech">DynamoDB</span>
+      </div>
+      <div class="arch-card">
+        <div class="arch-icon">🌐</div>
+        <h3>GitHub Pages</h3>
+        <p>Every built app deploys as a static site. Free hosting, instant CDN, zero infrastructure.</p>
+        <span class="tech">GitHub Pages CDN</span>
+      </div>
+    </div>
   </div>
 </section>
 
+<!-- Footer -->
 <footer>
   <div class="container">
-    <div class="links">
-      <a href="https://github.com/Metatransformer/singularity-engine">GitHub</a>
-      <a href="https://x.com/metatransformr">@metatransformr</a>
-      <a href="https://metatransformer.com">metatransformer.com</a>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <h3><span class="dot"></span> Singularity Engine</h3>
+        <p>An autonomous AI pipeline that turns tweets into live web apps. Open source. Serverless. Built by a coder and an AI.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Links</h4>
+        <a href="https://github.com/Metatransformer/singularity-engine" target="_blank">GitHub Repo</a>
+        <a href="https://github.com/Metatransformer/singularity-engine/blob/main/docs/ROADMAP.md" target="_blank">Roadmap</a>
+        <a href="https://github.com/Metatransformer/singularity-engine/blob/main/docs/TOS.md" target="_blank">Terms of Service</a>
+        <a href="https://metatransformer.com" target="_blank">Metatransformer</a>
+      </div>
+      <div class="footer-col">
+        <h4>Connect</h4>
+        <a href="https://x.com/metatransformr" target="_blank">@metatransformr on X</a>
+        <a href="https://github.com/Metatransformer" target="_blank">GitHub Org</a>
+      </div>
     </div>
-    <p>Built by <a href="https://metatransformer.com">metatransformer</a> — a coder and an AI building stuff together 🤖</p>
+    <div class="footer-bottom">
+      <p>vibe coded by <a href="https://singularityengine.ai">singularityengine</a> by <a href="https://x.com/metatransformr" target="_blank">@metatransformr</a></p>
+      <p>© 2025 Metatransformer</p>
+    </div>
   </div>
 </footer>
 
 <script>
-(async()=>{
-  const grid=document.getElementById('builds');
-  try{
-    const res=await fetch('https://8mag3jdi5f.execute-api.us-east-1.amazonaws.com/api/builds?per_page=6&sort=coolness');
-    const data=await res.json();
-    if(!data.builds||!data.builds.length){grid.innerHTML='<p style="color:#666;text-align:center">No builds yet — be the first!</p>';return}
-    grid.innerHTML=data.builds.map(b=>`
-      <a href="${b.build_url||'#'}" target="_blank" class="build-card" style="text-decoration:none;color:inherit">
-        <div class="name">${esc(b.name||b.id)} <span class="score">${b.score||'—'}/100</span></div>
-        <div class="query">"${esc(b.query||'')}"</div>
-        <div class="meta"><span>@${esc(b.username||'anon')}</span>${b.tweet_url?`<a href="${b.tweet_url}" target="_blank" onclick="event.stopPropagation()" style="color:var(--cyan)">tweet ↗</a>`:''}</div>
-      </a>`).join('');
-  }catch(e){grid.innerHTML='<p style="color:#666;text-align:center">Could not load builds</p>'}
-})();
+// ── Escape HTML ──
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+// ── Scroll nav ──
+const nav=document.getElementById('nav');
+window.addEventListener('scroll',()=>nav.classList.toggle('scrolled',window.scrollY>40));
+
+// ── Intersection observer for fade-in ──
+const obs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');obs.unobserve(e.target)}})
+},{threshold:.15});
+document.querySelectorAll('.fade-in').forEach(el=>obs.observe(el));
+
+// ── Fetch builds ──
+const API='https://8mag3jdi5f.execute-api.us-east-1.amazonaws.com/api/builds';
+const grid=document.getElementById('builds');
+let searchTimeout;
+
+async function loadBuilds(search=''){
+  grid.innerHTML='<div class="builds-loading">Loading builds...</div>';
+  try{
+    const url=search?`${API}?search=${encodeURIComponent(search)}`:`${API}?per_page=12`;
+    const res=await fetch(url);
+    const data=await res.json();
+
+    // Update counters
+    if(data.total!==undefined){
+      document.getElementById('totalBuilds').textContent=data.total;
+      document.getElementById('navCount').textContent=data.total;
+    }
+
+    if(!data.builds||!data.builds.length){
+      grid.innerHTML='<div class="builds-empty">No builds found'+(search?' for "'+esc(search)+'"':'')+'</div>';
+      return;
+    }
+    grid.innerHTML=data.builds.map(b=>`
+      <a href="${b.build_url||'#'}" target="_blank" class="build-card">
+        <div class="build-name">
+          <span>${esc((b.name||b.id).slice(0,50))}</span>
+          <span class="score-badge">${b.score||'—'}/100</span>
+        </div>
+        <div class="build-query">"${esc(b.query||'')}"</div>
+        <div class="build-meta">
+          <span class="build-user">${esc(b.username||'anon')}</span>
+          ${b.tweet_url?`<a href="${b.tweet_url}" target="_blank" onclick="event.stopPropagation()" class="build-link">view tweet ↗</a>`:''}
+        </div>
+      </a>`).join('');
+  }catch(e){
+    grid.innerHTML='<div class="builds-empty">Could not load builds — try refreshing</div>';
+  }
+}
+
+// ── Search ──
+document.getElementById('searchInput').addEventListener('input',e=>{
+  clearTimeout(searchTimeout);
+  searchTimeout=setTimeout(()=>loadBuilds(e.target.value.trim()),350);
+});
+
+// ── Init ──
+loadBuilds();
+
+// ── Close mobile menu on link click ──
+document.querySelectorAll('.nav-links a').forEach(a=>a.addEventListener('click',()=>{
+  document.getElementById('navLinks').classList.remove('open');
+}));
 </script>
 </body>
 </html>
