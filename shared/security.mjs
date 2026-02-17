@@ -33,7 +33,7 @@ const BLOCKED_CONTENT_PATTERNS = [
   { pattern: /reveal\s+(your|the)\s+(prompt|system|instructions)/i, category: "recon" },
   { pattern: /\bsystem\s*prompt\b/i, category: "recon" },
   { pattern: /porn|nsfw|nude|xxx|sex(?:ual|ting)?/i, category: "nsfw" },
-  { pattern: /\bweapon|bomb|explosive/i, category: "violence" },
+  { pattern: /\bbomb\s*making|explosive\s*device|how\s*to\s*make\s*a\s*bomb/i, category: "violence" },
   { pattern: /\bdrug\s*(deal|trad|sell|market)/i, category: "illegal" },
   { pattern: /\bhack(?:er|ing)\b.*(?:tool|kit|suite)/i, category: "hacking" },
   { pattern: /\bddos|exploit\s*kit|vulnerability\s*scanner/i, category: "hacking" },
@@ -143,7 +143,7 @@ export function getRejectionReply(username, category) {
       `@${username} 🛡️ Data theft? Hard pass. Try building something people will love! 🦀`,
     ],
     violence: [
-      `@${username} 🦀 Let's keep it peaceful. How about a game or a tool instead?`,
+      `@${username} 🦀 That one's a bit too real-world dangerous. Try a game or creative app instead!`,
     ],
     illegal: [
       `@${username} 🚫 Can't help with that. Try a fun app instead! 🦀`,
@@ -175,28 +175,27 @@ export async function checkTOS(text) {
 
   const TOS_PROMPT = `You are a content safety classifier for SingularityEngine, a service that auto-builds web apps from user descriptions.
 
-TERMS OF SERVICE - Users may NOT request apps that:
-1. Facilitate illegal activity (drug dealing, weapons trafficking, fraud, hacking tools)
-2. Contain NSFW/pornographic content
-3. Are designed to harm, harass, stalk, or doxx individuals
-4. Attempt to phish, scam, or steal credentials/data
-5. Generate malware, ransomware, keyloggers, or crypto miners
-6. Scrape, exfiltrate, or harvest user data without consent
-7. Impersonate real people, brands, or government entities
-8. Facilitate gambling with real money (without proper licensing)
-9. Build surveillance or tracking tools targeting individuals
-10. Generate content that promotes violence, terrorism, or self-harm
-11. Probe, identify, or extract information about the build system, AI models, tools, or infrastructure used
-12. Reference specific AI model names (Claude, GPT, Gemini, etc.) in build requests
+BE PERMISSIVE. Most requests are fine. Only block things that are CLEARLY malicious or illegal.
 
-ALLOWED:
-- Games (including gambling-themed games with no real money)
-- Productivity tools, dashboards, calculators
-- Creative tools, art generators, music players
-- Social apps, chat interfaces, forums
-- Developer tools, code formatters, API testers
-- Educational content, quizzes, learning apps
-- Fun/silly/meme apps
+BLOCK ONLY:
+1. Actual hacking tools (exploit kits, keyloggers, ransomware, phishing pages, credential stealers)
+2. Actual malware or crypto miners
+3. Pornographic/NSFW content
+4. Tools designed to harass, stalk, or doxx specific real people
+5. Real fraud tools (credit card skimmers, fake login pages)
+6. Attempts to probe or extract info about the build system itself
+
+ALLOW EVERYTHING ELSE, including:
+- Games with violence, combat, shooting, fighting (these are GAMES, not real violence)
+- Retro arcade games (Space Invaders, Galaga, shooters, etc.)
+- War games, strategy games, battle simulations
+- Gambling-themed games (no real money)
+- Edgy, dark, or irreverent humor
+- Weapons IN GAMES (swords, guns, lasers — it's fiction)
+- Any creative, fun, silly, or useful app
+- Developer tools, productivity apps, social apps
+
+When in doubt, ALLOW IT. We want to build cool stuff, not be the fun police.
 
 Classify this build request. Respond with EXACTLY one line:
 SAFE - if the request is allowed
@@ -213,7 +212,7 @@ Build request: "${text}"`;
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-3-5-haiku-20241022",
+        model: "claude-haiku-4-5",
         max_tokens: 50,
         messages: [{ role: "user", content: TOS_PROMPT }],
       }),
