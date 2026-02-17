@@ -208,9 +208,9 @@ export async function handler() {
       continue;
     }
 
-    // Rate limit: 2 builds per user per day (owner exempt)
+    // Rate limit: 10 builds per user per day (owner exempt)
     const userBuilds = await getUserBuildCount(reply.username);
-    if (userBuilds >= 2 && reply.username.toLowerCase() !== OWNER_USERNAME.toLowerCase()) {
+    if (userBuilds >= 10 && reply.username.toLowerCase() !== OWNER_USERNAME.toLowerCase()) {
       console.log(`⏭️ Rate limited @${reply.username} (${userBuilds} builds today)`);
       // Queue a rate-limit reply so the user knows
       await ddb.send(new PutCommand({
