@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
+    "@andersmyrmel/vard": "^1.2.0",
     "@anthropic-ai/sdk": "^0.39.0"
   }
 }

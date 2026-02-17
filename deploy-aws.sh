@@ -173,7 +173,7 @@ rm -rf "$TMPDIR_DEPLOYER"
 # 4. Deploy Tweet Watcher
 TMPDIR_WATCHER=$(mktemp -d)
 cat > "$TMPDIR_WATCHER/package.json" << 'PKGJSON'
-{"name":"singularity-watcher","version":"1.0.0","type":"module","dependencies":{"@aws-sdk/client-dynamodb":"^3.0.0","@aws-sdk/lib-dynamodb":"^3.0.0","@aws-sdk/client-lambda":"^3.0.0"}}
+{"name":"singularity-watcher","version":"1.0.0","type":"module","dependencies":{"@aws-sdk/client-dynamodb":"^3.0.0","@aws-sdk/lib-dynamodb":"^3.0.0","@aws-sdk/client-lambda":"^3.0.0","@andersmyrmel/vard":"^1.2.0"}}
 PKGJSON
 deploy_lambda "$WATCHER_FN" "aws/tweet-watcher/index.mjs" "true" "$TMPDIR_WATCHER/package.json" \
   "TABLE_NAME=$TABLE_NAME,CODE_RUNNER_FUNCTION=$CODE_RUNNER_FN,DEPLOYER_FUNCTION=$DEPLOYER_FN,X_BEARER_TOKEN=${X_BEARER_TOKEN:-},WATCHED_TWEET_ID=${WATCHED_TWEET_ID:-},OWNER_USERNAME=${OWNER_USERNAME:-}" 300 256
