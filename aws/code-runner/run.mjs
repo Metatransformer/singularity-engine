@@ -17,14 +17,11 @@ import { scanGeneratedCode } from "./shared/security.mjs";
 // Build tool is configurable — never hardcode tool names in output
 const BUILD_ENGINE = process.env.BUILD_ENGINE || "default";
 
-// Auth: prefer OAuth session token, fall back to API key
-const authConfig = {};
-if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-  authConfig.apiKey = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-} else if (process.env.ANTHROPIC_API_KEY) {
-  authConfig.apiKey = process.env.ANTHROPIC_API_KEY;
-}
-const client = new Anthropic(authConfig);
+// Auth: SDK natively supports authToken (Bearer) and apiKey (x-api-key)
+// Set ANTHROPIC_AUTH_TOKEN for OAuth session tokens (prioritized by SDK when both present)
+// Set ANTHROPIC_API_KEY for standard API keys
+// The SDK reads both from env vars automatically — no config needed here
+const client = new Anthropic();
 
 async function generateApp(request, appId) {
   console.log(`🔨 Building: "${request}" (namespace: ${appId})`);
