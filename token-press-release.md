@@ -121,6 +121,66 @@ Allocation: ~6.9%% of total supply (updated — fees were redirected by bankrbot
 The token is currently trading at $0.00000414 with a market cap of $414,418.66. You can view more details on GeckoTerminal: https://www.geckoterminal.com/base/pools/0x06cece127f81bf76d388859549a93a120ec52ba3
 ```
 
+**POST LAUNCH CLARIFICATION ON FURTHER TOKENS FOR MESH/SINGULARITY ENGINE, 3 AM CST Tuesday 17 Feb**
+
+```
+I launched with my friends for final tests exactly at 11:30 PM Midnight as promised (pre-launch tweet + working builds happening starting at 11:30)[https://x.com/metatransformr/status/2023624722022277382?s=20]
+
+As it was in a working state, I didn't make another statement until 1:15 AM (lost track of time):
+(Post launch statement coming soon)[https://x.com/metatransformr/status/2023657576412438574?s=2] in the following way:
+
+Apparently they didn't see the actual working engine on the previous thread, and it was my mistake to not have the post ready at midnight but I didn't want to post until I was sure it would work.
+
+Some lovely shitcoiners responded:
+- Why another token ?
+- So you're releasing new tokens?
+- bro wants the token at 0 before any real updates happen I guess
+- post launch? did I miss the actual launch post? i’m lost haha
+- gay dev farming
+- stop dumping scam
+
+Around this time everyone was freaking out yada yada and I was editing my (actual launch post)[https://x.com/metatransformr/status/2023676262871449764?s=20] which I felt was ready at for public testing at 2:29 AM.
+
+At this time some real builds started working, but I found more holes in the stack and immediately set to patching them (backlog got clogged.)
+
+Finally responded with this statement that I stand by as I am committing it to the repo:
+
+I was working out kinks post-launch for the past 2 hours because im an actual dev and it's 3 AM again.
+
+So let me make this ABUNDANTLY CLEAR:
+
+I am not launching ANY NEW TOKENS FOR THESE PROJECTS.
+
+$singularity-engine on BASE is the *only* token that is being launched for singularity engine AND the Mesh.
+
+0x06CecE127F81Bf76d388859549A93a120Ec52BA3
+
+https://geckoterminal.com/base/pools/0x583faa5e649ad044bd166745d59683e4eae0e2ebe8c54f047a92b8066da282b9
+
+In 2 minutes this will be BOUND and version controlled in my TOKENOMICS PRESS RELEASE i created before
+
+It's now 3 AM so I'm a bit late but here it is. Bound to the repo.
+
+In other news, bankr.bot aka 0xDeployer did agree to help me bring up the treasury of the project (resulting in another press release a while back on updated tokenomics, also stored in this repo)
+and as of now (despite the panic dumping around midnight) - the treasury allocation is :
+singularity-engine - 10,859,288,916.504516446965549128 ($105,896.42) - about 10.859% of a pool of 100B tokens (that 100B will never change.)
+
+market cap is $986.0k.
+
+full breakdown:
+
+singularity-engine on base
+- price: $0.00000986
+- market cap: $986.0k
+- 24h volume: $1.0m
+- 24h change: -26.20%
+- holders: 1,305
+
+contract: 0x06CecE127F81Bf76d388859549A93a120Ec52BA3
+chart: https://www.geckoterminal.com/base/tokens/0x06CecE127F81Bf76d388859549A93a120Ec52BA3
+basescan: https://basescan.org/address/0x06CecE127F81Bf76d388859549A93a120Ec52BA3
+```
+
 
 ---
 
