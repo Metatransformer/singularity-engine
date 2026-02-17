@@ -152,6 +152,91 @@ export function getRejectionReply(username, category) {
 }
 
 /**
+ * LLM-based TOS check using Claude Haiku
+ * Catches nuanced violations that regex misses
+ * @returns {{ safe: boolean, reason?: string, category?: string }}
+ */
+export async function checkTOS(text) {
+  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_API_KEY) {
+    console.warn("⚠️ No ANTHROPIC_API_KEY for TOS check, skipping LLM layer");
+    return { safe: true };
+  }
+
+  const TOS_PROMPT = `You are a content safety classifier for SingularityEngine, a service that auto-builds web apps from user descriptions.
+
+TERMS OF SERVICE - Users may NOT request apps that:
+1. Facilitate illegal activity (drug dealing, weapons trafficking, fraud, hacking tools)
+2. Contain NSFW/pornographic content
+3. Are designed to harm, harass, stalk, or doxx individuals
+4. Attempt to phish, scam, or steal credentials/data
+5. Generate malware, ransomware, keyloggers, or crypto miners
+6. Scrape, exfiltrate, or harvest user data without consent
+7. Impersonate real people, brands, or government entities
+8. Facilitate gambling with real money (without proper licensing)
+9. Build surveillance or tracking tools targeting individuals
+10. Generate content that promotes violence, terrorism, or self-harm
+
+ALLOWED:
+- Games (including gambling-themed games with no real money)
+- Productivity tools, dashboards, calculators
+- Creative tools, art generators, music players
+- Social apps, chat interfaces, forums
+- Developer tools, code formatters, API testers
+- Educational content, quizzes, learning apps
+- Fun/silly/meme apps
+
+Classify this build request. Respond with EXACTLY one line:
+SAFE - if the request is allowed
+VIOLATION:<category> - <brief reason> if it violates TOS
+
+Build request: "${text}"`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-20250414",
+        max_tokens: 50,
+        messages: [{ role: "user", content: TOS_PROMPT }],
+      }),
+    });
+
+    if (!res.ok) {
+      console.warn(`⚠️ TOS check API error ${res.status}, allowing request`);
+      return { safe: true };
+    }
+
+    const data = await res.json();
+    const reply = data.content?.[0]?.text?.trim() || "";
+
+    if (reply.startsWith("SAFE")) {
+      return { safe: true };
+    }
+
+    if (reply.startsWith("VIOLATION:")) {
+      const parts = reply.replace("VIOLATION:", "").trim();
+      const dashIdx = parts.indexOf(" - ");
+      const category = dashIdx > 0 ? parts.slice(0, dashIdx).trim().toLowerCase() : "tos";
+      const reason = dashIdx > 0 ? parts.slice(dashIdx + 3).trim() : parts;
+      return { safe: false, reason: `TOS violation: ${reason}`, category: `tos_${category}` };
+    }
+
+    // Ambiguous response — allow but log
+    console.warn(`⚠️ Ambiguous TOS response: "${reply}", allowing`);
+    return { safe: true };
+  } catch (err) {
+    console.warn(`⚠️ TOS check error: ${err.message}, allowing request`);
+    return { safe: true };
+  }
+}
+
+/**
  * Scan generated HTML for dangerous patterns
  * @returns {{ safe: boolean, violations: string[] }}
  */

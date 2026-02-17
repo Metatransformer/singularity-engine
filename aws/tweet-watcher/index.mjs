@@ -23,7 +23,7 @@ const OWNER_USERNAME = process.env.X_BOT_USERNAME || process.env.OWNER_USERNAME 
 const TRIGGER_KEYWORD = process.env.TRIGGER_KEYWORD || "singularityengine.ai";
 
 // --- Security (shared module) ---
-import { sanitizeBuildRequest, getRejectionReply } from "./shared/security.mjs";
+import { sanitizeBuildRequest, getRejectionReply, checkTOS } from "./shared/security.mjs";
 
 // --- State management ---
 async function getLastProcessedId() {
@@ -263,6 +263,33 @@ export async function handler() {
           ns: "_rejected",
           key: `${reply.id}`,
           value: { username: reply.username, request: buildRequest.slice(0, 200), reason: check.reason, category: check.category },
+          updatedAt: new Date().toISOString(),
+        },
+      }));
+      continue;
+    }
+
+    // Layer 2: LLM-based TOS check (Haiku — fast + cheap)
+    const tosCheck = await checkTOS(check.cleaned);
+    if (!tosCheck.safe) {
+      console.log(`❌ TOS violation @${reply.username}: ${tosCheck.reason}`);
+      const rejectionText = `@${reply.username} 🦀 Your request was flagged by our content policy. ${tosCheck.reason || "Please try a different idea!"}`;
+      await ddb.send(new PutCommand({
+        TableName: TABLE,
+        Item: {
+          ns: "_reply_queue",
+          key: `${Date.now()}-${reply.id}`,
+          value: { tweetId: reply.id, username: reply.username, replyText: rejectionText },
+          updatedAt: new Date().toISOString(),
+          status: "pending",
+        },
+      }));
+      await ddb.send(new PutCommand({
+        TableName: TABLE,
+        Item: {
+          ns: "_rejected",
+          key: `${reply.id}`,
+          value: { username: reply.username, request: check.cleaned.slice(0, 200), reason: tosCheck.reason, category: tosCheck.category },
           updatedAt: new Date().toISOString(),
         },
       }));
