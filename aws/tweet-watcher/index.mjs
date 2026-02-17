@@ -17,8 +17,13 @@ const DEPLOYER_FN = process.env.DEPLOYER_FUNCTION || "singularity-deployer";
 const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
 // Support both WATCHED_TWEET_IDS (new, comma-separated) and WATCHED_TWEET_ID (legacy)
 const WATCHED_TWEET_ID = process.env.WATCHED_TWEET_IDS || process.env.WATCHED_TWEET_ID;
-// X_BOT_USERNAME takes precedence over OWNER_USERNAME (legacy)
-const OWNER_USERNAME = process.env.X_BOT_USERNAME || process.env.OWNER_USERNAME || "metatransformr";
+// OWNER_USERNAME = the human who owns the bot (can trigger builds, never skipped)
+const OWNER_USERNAME = process.env.OWNER_USERNAME || process.env.X_BOT_USERNAME || "metatransformr";
+// X_BOT_USERNAMES = bot accounts that post replies (comma-separated, skipped to avoid self-reply loops)
+// Falls back to EXTRA_BOT_USERNAMES for backwards compat
+const X_BOT_USERNAMES = (process.env.X_BOT_USERNAMES || process.env.EXTRA_BOT_USERNAMES || "singularityengn").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+// All trigger usernames = owner + bots (users can @mention any of these to trigger a build)
+const ALL_TRIGGER_USERNAMES = [OWNER_USERNAME.toLowerCase(), ...X_BOT_USERNAMES].filter((v, i, a) => a.indexOf(v) === i);
 // Configurable trigger keyword (default: singularityengine.ai)
 const TRIGGER_KEYWORD = process.env.TRIGGER_KEYWORD || "singularityengine.ai";
 
@@ -91,23 +96,26 @@ const VALID_KEYWORDS = ["build", "create", "make", "generate", "deploy"];
 const KEYWORD_PATTERN = VALID_KEYWORDS.join("|");
 
 function extractBuildRequest(text, tweetMeta) {
-  // STRICT FORMAT: @metatransformr <keyword> [me] [a/an] <request>
-  // The keyword MUST appear right after the @mention, not elsewhere in the text.
-  // This prevents false positives from conversational tweets that happen to contain "build".
-  const strictRe = new RegExp(
-    `@${OWNER_USERNAME}\\s+(?:${KEYWORD_PATTERN})\\s+(?:me\\s+)?(?:an?\\s+)?(.+)`,
-    "i"
-  );
-  const strictMatch = text.match(strictRe);
-  if (strictMatch) return strictMatch[1].trim();
+  // Support all trigger usernames (@metatransformr + @singularityengn etc.)
+  const allBotUsernames = ALL_TRIGGER_USERNAMES;
+  
+  for (const botName of allBotUsernames) {
+    // STRICT FORMAT: @botname <keyword> [me] [a/an] <request>
+    const strictRe = new RegExp(
+      `@${botName}\\s+(?:${KEYWORD_PATTERN})\\s+(?:me\\s+)?(?:an?\\s+)?(.+)`,
+      "i"
+    );
+    const strictMatch = text.match(strictRe);
+    if (strictMatch) return strictMatch[1].trim();
 
-  // Also accept: <keyword> @metatransformr <request> (alternate word order)
-  const altRe = new RegExp(
-    `(?:${KEYWORD_PATTERN})\\s+@${OWNER_USERNAME}\\s+(?:me\\s+)?(?:an?\\s+)?(.+)`,
-    "i"
-  );
-  const altMatch = text.match(altRe);
-  if (altMatch) return altMatch[1].trim();
+    // Also accept: <keyword> @botname <request> (alternate word order)
+    const altRe = new RegExp(
+      `(?:${KEYWORD_PATTERN})\\s+@${botName}\\s+(?:me\\s+)?(?:an?\\s+)?(.+)`,
+      "i"
+    );
+    const altMatch = text.match(altRe);
+    if (altMatch) return altMatch[1].trim();
+  }
 
   return null;
 }
@@ -131,6 +139,11 @@ async function fetchReplies(sinceId) {
 
   // Direct @mentions with build keywords
   queries.push(`@${OWNER_USERNAME} (build OR create OR make OR generate OR deploy) -is:retweet`);
+
+  // Also search for mentions of bot usernames (e.g. @singularityengn)
+  for (const extraBot of X_BOT_USERNAMES) {
+    queries.push(`@${extraBot} (build OR create OR make OR generate OR deploy) -is:retweet`);
+  }
 
   const allTweets = [];
   const seenIds = new Set();
@@ -215,8 +228,8 @@ export async function handler() {
   for (const reply of replies) {
     if (reply.id > lastId) lastId = reply.id;
 
-    // Skip self-replies (bot responses)
-    if (reply.username.toLowerCase() === OWNER_USERNAME.toLowerCase()) {
+    // Skip self-replies (bot responses) — only skip bot accounts, NOT the owner
+    if (X_BOT_USERNAMES.some(bot => reply.username.toLowerCase() === bot.toLowerCase())) {
       console.log(`⏭️ Skipping self-reply from @${reply.username}`);
       continue;
     }

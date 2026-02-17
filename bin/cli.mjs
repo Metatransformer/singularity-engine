@@ -412,8 +412,23 @@ async function cmdConfig() {
 
   // ═══ Bot Configuration ═══
   console.log(`\n${c.bold}🤖 Bot Configuration${c.reset}`);
-  const existingBotUser = isPlaceholder(config.X_BOT_USERNAME) ? (config.OWNER_USERNAME || "") : config.X_BOT_USERNAME;
-  config.X_BOT_USERNAME = await ask("Bot X username (without @)", existingBotUser || "metatransformr");
+  console.log(`  ${c.dim}Owner = your human account (can trigger builds, never filtered)${c.reset}`);
+  console.log(`  ${c.dim}Bot accounts = accounts that post replies (filtered to avoid loops)${c.reset}`);
+  
+  // Owner username (the human, not filtered)
+  if (!config.OWNER_USERNAME || isPlaceholder(config.OWNER_USERNAME)) {
+    // Migrate from X_BOT_USERNAME if that was set
+    config.OWNER_USERNAME = config.X_BOT_USERNAME || "metatransformr";
+  }
+  config.OWNER_USERNAME = await ask("Owner X username (without @)", config.OWNER_USERNAME);
+  
+  // Bot usernames (post replies, get filtered from self-reply detection)
+  const existingBots = config.X_BOT_USERNAMES || config.EXTRA_BOT_USERNAMES || "";
+  config.X_BOT_USERNAMES = await ask("Bot X usernames (comma-separated, accounts that post replies)", existingBots || "singularityengn");
+  
+  // Keep legacy X_BOT_USERNAME for backwards compat
+  config.X_BOT_USERNAME = config.OWNER_USERNAME;
+  
   config.TRIGGER_KEYWORD = await ask("Trigger keyword", config.TRIGGER_KEYWORD || "singularityengine.ai");
   config.WATCHED_TWEET_IDS = await ask("Watched tweet IDs (comma-separated)", config.WATCHED_TWEET_IDS || config.WATCHED_TWEET_ID || "");
 
@@ -752,7 +767,7 @@ async function cmdDeploy(args) {
 
     await deployLambda(WATCHER_FN, "aws/tweet-watcher/index.mjs", true,
       { "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0", "@aws-sdk/client-lambda": "^3.0.0", "@andersmyrmel/vard": "^1.0.0" },
-      { TABLE_NAME: tableName, CODE_RUNNER_FUNCTION: CODE_RUNNER_FN, DEPLOYER_FUNCTION: DEPLOYER_FN, X_BEARER_TOKEN: env.X_BEARER_TOKEN || "", WATCHED_TWEET_IDS: env.WATCHED_TWEET_IDS || env.WATCHED_TWEET_ID || "", WATCHED_TWEET_ID: env.WATCHED_TWEET_ID || "", X_BOT_USERNAME: env.X_BOT_USERNAME || env.OWNER_USERNAME || "", OWNER_USERNAME: env.OWNER_USERNAME || "", TRIGGER_KEYWORD: env.TRIGGER_KEYWORD || "singularityengine.ai" },
+      { TABLE_NAME: tableName, CODE_RUNNER_FUNCTION: CODE_RUNNER_FN, DEPLOYER_FUNCTION: DEPLOYER_FN, X_BEARER_TOKEN: env.X_BEARER_TOKEN || "", WATCHED_TWEET_IDS: env.WATCHED_TWEET_IDS || env.WATCHED_TWEET_ID || "", WATCHED_TWEET_ID: env.WATCHED_TWEET_ID || "", X_BOT_USERNAME: env.X_BOT_USERNAME || env.OWNER_USERNAME || "", OWNER_USERNAME: env.OWNER_USERNAME || "", X_BOT_USERNAMES: env.X_BOT_USERNAMES || env.EXTRA_BOT_USERNAMES || "singularityengn", TRIGGER_KEYWORD: env.TRIGGER_KEYWORD || "singularityengine.ai" },
       300, 256);
 
     await deployLambda(DB_API_FN, "aws/db-api/index.mjs", false,

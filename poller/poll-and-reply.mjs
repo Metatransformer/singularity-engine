@@ -74,7 +74,7 @@ async function markDone(queueKey) {
 
 async function replyViaXApi(item) {
   const { tweetId, username, appUrl, request } = item;
-  const replyText = item.replyText || `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by SingularityEngine 🦀\nhttps://github.com/Metatransformer/singularity-engine`;
+  const replyText = item.replyText || `@${username} Done! ✨\n\n${appUrl}\n\nbuilt by @singularityengn powered by @metatransformr (diy)`;
   console.log(`  🐦 [x-api] Replying to @${username} (tweet ${tweetId})`);
 
   const creds = loadCredentialsFromEnv();
@@ -97,7 +97,7 @@ async function replyViaCDP(item) {
   const { tweetId, username, appUrl, request } = item;
   const ownerUsername = process.env.OWNER_USERNAME || "your_x_username";
   const tweetUrl = `https://x.com/${ownerUsername}/status/${tweetId}`;
-  const replyText = item.replyText || `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by SingularityEngine 🦀\nhttps://github.com/Metatransformer/singularity-engine`;
+  const replyText = item.replyText || `@${username} Done! ✨\n\n${appUrl}\n\nbuilt by @singularityengn powered by @metatransformr (diy)`;
 
   console.log(`  🐦 Replying to @${username} → ${tweetUrl}`);
 
