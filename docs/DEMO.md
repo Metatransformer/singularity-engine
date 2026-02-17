@@ -13,7 +13,7 @@
 Reply to the [launch thread](https://x.com/metatransformr/status/2022500855761572149) or tweet at [@metatransformr](https://x.com/metatransformr) with:
 
 ```
-@metatransformr singularityengine.ai build me [your idea here]
+@metatransformr build [your idea here]
 ```
 
 ### Step 2
@@ -33,8 +33,8 @@ Anything that runs in a browser as a single-page app:
 Every app gets a **persistent NoSQL backend** — your data survives across sessions.
 
 ### Limits
-- **2 builds per user per day** (resets midnight UTC)
-- Trigger keyword: `singularityengine.ai`
+- **10 builds per user per day** (resets midnight UTC)
+- Trigger: reply with "build [your idea]"
 
 ---
 

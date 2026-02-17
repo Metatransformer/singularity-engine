@@ -91,7 +91,7 @@ Full self-host instructions and configuration coming soon.
 
 ## Beta Limitations
 
-- **2 builds per user per day** (free tier)
+- **10 builds per user per day** (free tier)
 - All source code is **public** (deployed to GitHub Pages)
 - Databases may be **wiped** during beta
 - No auth/security guarantees yet

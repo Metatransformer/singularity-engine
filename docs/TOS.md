@@ -22,7 +22,7 @@ This platform is in **public beta**. Everything is experimental.
 
 ## Usage Limits
 
-- **2 builds per user per day** (free tier)
+- **10 builds per user per day** (free tier)
 - Additional builds available via paid plans (coming soon)
 
 ## Acceptable Use
