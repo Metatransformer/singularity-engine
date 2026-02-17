@@ -1,47 +1,61 @@
-# 🤖 Singularity Engine
+# Singularity Engine
 
 **v0.1 Beta (Experimental)**
 
-Tweet a request → AI builds a live web app → deploys it → replies with the link. ~45 seconds.
+Tweet a request → AI builds a live web app → deploys it → replies with the link. ~60 seconds.
 
 ```
-SingularityEngine build me a tetris game with neon visuals
+@metatransformr singularityengine.ai build me a tetris game with neon visuals
 ```
 
-> ⚠️ **This is an early experimental release.** Apps are AI-generated, may be buggy, and are deployed as-is. See [Known Limitations](#known-limitations) below.
+> **This is an early experimental release.** Apps are AI-generated, may be buggy, and are deployed as-is. See [Known Limitations](#known-limitations) below.
 
-🌐 [singularityengine.ai](https://singularityengine.ai) · 🐦 [@metatransformr](https://x.com/metatransformr) · 💬 [Discord](https://discord.gg/clawd) · 🏠 [metatransformer.com](https://metatransformer.com)
+🌐 [singularityengine.ai](https://singularityengine.ai) · 🐦 [@metatransformr](https://x.com/metatransformr) · 💬 [Discord](https://discord.gg/CYp4wJvFQF) · 🏠 [metatransformer.com](https://metatransformer.com)
+
+---
+
+## Why This Exists
+
+We're at the knee of the curve. AI agents can write code, deploy it, and operate autonomously — but there's no infrastructure for them to discover each other, coordinate, or be held accountable. Singularity Engine is the **creation layer** — a working proof of concept for autonomous AI that turns natural language into deployed software at near-zero marginal cost. [The Mesh](https://github.com/Metatransformer/the-mesh) is the **inhabitation layer** — a federated agent infrastructure protocol where agents and humans coexist with cryptographic identity and human oversight.
+
+Together they form the [Metatransformer](https://metatransformer.com) ecosystem: open-source infrastructure for Human-AI Synthesis.
+
+Read the full thesis: **[The Transformer Is the Transistor](docs/articles/the-transformer-is-the-transistor.md)** ([view on X](https://x.com/metatransformr/status/2022949168998756595))
+
+---
+
+## Try the Demo
+
+Reply to any [@metatransformr](https://x.com/metatransformr) thread on X with:
+
+```
+@metatransformr singularityengine.ai build me a pomodoro timer
+@metatransformr singularityengine.ai make a snake game with high scores
+@metatransformr singularityengine.ai create a mood tracker
+```
+
+The bot detects your tweet, AI generates a full single-page app with persistent NoSQL storage, deploys it to GitHub Pages, and replies with the live link. ~2 minutes end-to-end.
+
+Rate limit: **2 builds per user per day** during beta.
+
+Full demo walkthrough: [`docs/DEMO.md`](docs/DEMO.md)
 
 ---
 
 ## How It Works
 
-1. **Tweet** — Reply to a [watched thread](https://x.com/metatransformr) or @mention with `SingularityEngine <your app idea>`
+1. **Tweet** — Reply to a [watched thread](https://x.com/metatransformr) with `singularityengine.ai` + your app idea
 2. **Sanitize** — Prompt injection detection, content filtering, rate limiting
 3. **Build** — Claude generates a complete single-file HTML app with persistence (SingularityDB)
 4. **Deploy** — Pushed to GitHub Pages instantly. You get the live link as a reply.
 
 Every generated app gets its own namespace in SingularityDB (DynamoDB-backed key-value store) for persistent data — leaderboards, saved state, user preferences.
 
-## Try It
-
-Reply to any [@metatransformr](https://x.com/metatransformr) thread with:
-
-```
-SingularityEngine build me a pomodoro timer
-SingularityEngine make a snake game with high scores
-SingularityEngine create a mood tracker
-```
-
-Rate limit: **2 builds per user per day** during beta.
+---
 
 ## Deploy Your Own
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/Metatransformer/singularity-engine/main/bin/install.sh | bash
-```
-
-Or manually:
+Clone the repo and run your own instance:
 
 ```bash
 git clone https://github.com/Metatransformer/singularity-engine.git
@@ -51,6 +65,12 @@ singularityengine config    # Interactive setup — auto-detects deps & credenti
 singularityengine deploy    # Deploy to AWS (Lambda, DynamoDB, API Gateway)
 singularityengine watch <tweet-id>
 singularityengine start
+```
+
+Or one-liner install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Metatransformer/singularity-engine/main/bin/install.sh | bash
 ```
 
 ### Requirements
@@ -66,6 +86,69 @@ singularityengine start
 **Two reply modes:**
 - **`openclaw` mode** (default) — Zero X API credentials needed. Uses [OpenClaw](https://openclaw.ai) browser automation.
 - **`x-api` mode** — Uses X API OAuth for reading tweets and posting replies directly.
+
+Full setup guide: [`docs/SETUP.md`](docs/SETUP.md)
+
+---
+
+## The Mesh — Federated Agent Infrastructure
+
+[**The Mesh**](https://github.com/Metatransformer/the-mesh) is a federated agent infrastructure protocol — self-hosted, open-source, model-agnostic. A persistent, decentralized network where AI agents and humans coexist as first-class citizens, communicating through open protocols (MCP, A2A), maintaining cryptographic identity (DIDs, UCANs), and governed by humans who retain authority over every consequential decision.
+
+Singularity Engine builds the tools. The Mesh is where they live.
+
+Read the manifesto: **[The Federated Agent Mesh](docs/articles/the-federated-agent-mesh.md)** ([view on X](https://x.com/metatransformr/status/2023288262278762646))
+
+---
+
+## DeFi and the $singularity-engine Token
+
+DeFi is real infrastructure for agentic systems. Machine-to-machine payments (Coinbase x402), agent wallets, and decentralized compute markets are not speculative — they're shipping now. The **$singularity-engine** token on the BASE network exists as an early community experiment to fund open-source agent infrastructure into existence without VC dependency.
+
+- **Contract:** [`0x06CecE127F81Bf76d388859549A93a120Ec52BA3`](https://dexscreener.com/base/0x06CecE127F81Bf76d388859549A93a120Ec52BA3)
+- **Network:** BASE (sub-cent transactions, 200ms blocks)
+- **Full transparency statement:** [`token-press-release.md`](token-press-release.md)
+- **Bankr.bot partnership:** [Press release on X](https://x.com/metatransformr/status/2023205508812001524)
+- **Token utility thesis:** [Thread on X](https://x.com/metatransformr/status/2022885459823657464)
+
+> **Nothing here is financial advice.** The token is early, has limited liquidity, and utility depends entirely on future development. Always verify on [basescan.org](https://basescan.org) before any interaction. Read the [full transparency statement](token-press-release.md).
+
+---
+
+## Who We're Looking For
+
+This is an open-source project built in public. We're looking for:
+
+- **A co-founder** with go-to-market, enterprise sales, or developer relations experience
+- **Developers** — distributed systems, real-time networking, security, agent frameworks
+- **Infrastructure partners** interested in decentralized mesh hosting
+- **Community members** who believe agents and humans need better shared environments
+
+Join the community: [Discord](https://discord.gg/CYp4wJvFQF) · [@metatransformr on X](https://x.com/metatransformr)
+
+---
+
+## Documentation
+
+### Articles
+- **[The Transformer Is the Transistor](docs/articles/the-transformer-is-the-transistor.md)** — Full thesis on why the transformer is a universal primitive generating a new intelligence stack, and what infrastructure is missing ([X thread](https://x.com/metatransformr/status/2022949168998756595))
+- **[The Federated Agent Mesh](docs/articles/the-federated-agent-mesh.md)** — Manifesto for a federated agent infrastructure protocol with human oversight, cryptographic identity, and model-agnostic design ([X thread](https://x.com/metatransformr/status/2023288262278762646))
+
+### Project Docs
+- [`docs/DEMO.md`](docs/DEMO.md) — Demo day walkthrough (users, developers, architecture)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — System architecture
+- [`docs/ARCHITECTURE-ROADMAP.md`](docs/ARCHITECTURE-ROADMAP.md) — Architecture TODOs and priority matrix (A1–A8)
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — Product roadmap (v0.1 → v1.0)
+- [`docs/SECURITY.md`](docs/SECURITY.md) — Security model
+- [`docs/SETUP.md`](docs/SETUP.md) — Full setup and deployment guide
+- [`docs/PRE-LAUNCH-CHECKLIST.md`](docs/PRE-LAUNCH-CHECKLIST.md) — Launch checklist
+- [`token-press-release.md`](token-press-release.md) — Token transparency statement and commitments
+
+### Related Repos
+- **[The Mesh](https://github.com/Metatransformer/the-mesh)** — Federated agent infrastructure protocol (WIP/pre-alpha)
+- **[Singularity Engine](https://github.com/Metatransformer/singularity-engine)** — This repo — autonomous tweet-to-app pipeline
+
+---
 
 ## CLI Commands
 
@@ -120,22 +203,6 @@ GET    /api/data/:namespace                 # List all keys
 - **Rate limits** — 2 builds/user/day. Server costs are currently fronted by [@metatransformr](https://x.com/metatransformr).
 - **GitHub Pages only** — No custom domains, no server-side rendering, no backends.
 
-## Roadmap
-
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full roadmap.
-
-**Current:** v0.1 Beta — tweet simple apps into existence, backed by DynamoDB, no auth, roll your own.
-
-**Next:** Build from website, live previews, social sharing, showcase page, error recovery.
-
-**Then:** Auth & accounts, dashboard, OpenClaw/agent integration, multi-model, plugins.
-
-**Ideation:** Platform, marketplace, monetization, The Mesh, and more. [Open an issue](https://github.com/Metatransformer/singularity-engine/issues) or [join Discord](https://discord.gg/clawd) to shape what gets built.
-
-## Changelog
-
-See [`CHANGELOG.md`](CHANGELOG.md) for detailed release notes.
-
 ## Development
 
 ```bash
@@ -170,7 +237,7 @@ bin/             # CLI and install scripts
 poller/          # Local reply poller (X API or OpenClaw)
 tests/           # Unit + integration tests (Vitest)
 site/            # Landing page (singularityengine.ai)
-docs/            # Architecture, security, setup guides
+docs/            # Architecture, security, setup guides, articles
 ```
 
 ## Contributing
@@ -221,6 +288,6 @@ This software integrates with third-party services (AWS, GitHub, X/Twitter, Anth
 
 ---
 
-Built by [metatransformer](https://metatransformer.com) — a coder and an AI building stuff together 🤖
+Built by [Nick Bryant](https://metatransformer.com) — a coder and an AI building stuff together
 
-[singularityengine.ai](https://singularityengine.ai) · [@metatransformr](https://x.com/metatransformr) · [Discord](https://discord.gg/clawd) · [metatransformer.com](https://metatransformer.com)
+[singularityengine.ai](https://singularityengine.ai) · [@metatransformr](https://x.com/metatransformr) · [Discord](https://discord.gg/CYp4wJvFQF) · [metatransformer.com](https://metatransformer.com)
