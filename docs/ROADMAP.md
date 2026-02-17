@@ -1,35 +1,49 @@
-# Singularity Engine — 3-Month Roadmap
+# Singularity Engine — Roadmap
 
-> Living document. Updated 2026-02-16. Priorities may shift based on user feedback.
+> We use GitHub Issues + Projects to track this roadmap. See the [Issues tab](https://github.com/Metatransformer/singularity-engine/issues) for individual tasks.
 
-## Month 1: Infrastructure & Monetization Foundation
+> Living document. Updated 2026-02-17. Priorities shift based on user feedback.
 
-- [ ] **CloudFront CDN** for deployed apps (faster loads, custom domains later)
-- [ ] **S3 private source storage** — move source out of public GitHub Pages
-- [ ] **Per-app API keys** for DynamoDB namespace auth (prevent cross-app data access)
+---
+
+## 🟢 Now (Active)
+
+What we're building right now.
+
+- [ ] **Better builds** — improve code generation quality, fewer broken deploys
+- [ ] **Faster deploys** — reduce end-to-end build time (target: <20s)
+- [ ] **Smarter iteration** — tell the bot to improve an existing build ("make the colors darker", "add a leaderboard")
+- [ ] **API-driven apps** — real backends, not just static HTML/JS/CSS. Per-app API endpoints.
+- [ ] **Improved error handling** — structured errors, user-friendly failure messages
+- [ ] **@SingularityEngn bot** — dedicated bot account for build requests (DMs + mentions)
+
+## 🔵 Next
+
+On deck after current priorities.
+
+- [ ] **Beyond X** — work everywhere, not just Twitter. Multi-channel input: Telegram, Discord, OpenClaw, Mesh
+- [ ] **Private repos** — take your builds home, private source code + hosting
+- [ ] **Environment variables** — secrets and API keys for private projects
+- [ ] **Per-app API keys** — DynamoDB namespace auth, prevent cross-app data access
 - [ ] **Dashboard MVP** — view your builds, source code, build logs
-- [ ] **Pay-for-more-builds** system (Stripe integration, default 2 free/day)
-- [ ] **Improved error responses** — structured errors from all Lambdas, user-friendly build failure messages
 
-## Month 2: Developer Experience & Scale
+## 🟣 Later
 
-- [ ] **Multi-user auth per app** — session-based authentication (not RLS), let apps have their own users
-- [ ] **Per-app API deployments** — each app gets its own API endpoint, not just static files
-- [ ] **Environment variables** for private projects (secrets, API keys)
-- [ ] **Source code minification** option (opt-in)
-- [ ] **DynamoDB limitations analysis** — evaluate migration path to DocumentDB or MongoDB Atlas
-- [ ] **Multiple programming languages** — Python, Go beyond just HTML/JS/CSS
+Bigger bets, longer horizon.
 
-## Month 3: Platform & Distribution
-
-- [ ] **Multi-channel input** — build apps from Telegram, Discord, OpenClaw skills, Mesh
-- [ ] **Kubernetes / off-AWS portability** — Helm chart, run Singularity Engine anywhere
-- [ ] **Paid private projects** — source code hidden, private hosting
-- [ ] **Multi-shot iterative builds** — reply to refine, iterate on your app in conversation
-- [ ] **Full dashboard with analytics** — traffic, usage stats, build history, cost tracking
+- [ ] **Dashboard with analytics** — traffic, usage stats, build history, cost tracking
+- [ ] **Pay-for-more-builds** — Stripe integration, default free tier + paid plans
+- [ ] **Multi-user auth per app** — session-based authentication, let apps have their own users
+- [ ] **Kubernetes portability** — Helm chart, run Singularity Engine anywhere (not just AWS)
+- [ ] **Multiple programming languages** — Python, Go, beyond HTML/JS/CSS
+- [ ] **CloudFront CDN** — custom domains, faster global loads
 
 ---
 
 ## How to Influence This Roadmap
 
-Tweet [@metatransformr](https://x.com/metatransformr) or open an issue. The loudest feedback wins.
+- Tweet [@SingularityEngn](https://x.com/SingularityEngn) or [@metatransformr](https://x.com/metatransformr)
+- Open a [GitHub Issue](https://github.com/Metatransformer/singularity-engine/issues)
+- Join the [Discord](https://discord.gg/metatransformer)
+
+The loudest feedback wins.

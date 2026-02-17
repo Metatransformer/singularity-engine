@@ -17,13 +17,15 @@ Singularity Engine turns a tweet into a deployed, functional web application —
 
 ## Try It
 
-Tweet [@metatransformr](https://x.com/metatransformr) with something like:
+**Official bot:** Tweet or DM [@SingularityEngn](https://x.com/SingularityEngn) with a build request:
 
-> build me a fractal explorer with zoom and color controls
+> @SingularityEngn build me a landing page for my startup
 
-> build me a multiplayer snake game
+> @SingularityEngn make a retro space invaders game
 
-> build me a color picker with hex/rgb output
+> @SingularityEngn create a pomodoro timer with ambient sounds
+
+You can also tweet [@metatransformr](https://x.com/metatransformr) (the creator) — both accounts can build.
 
 That's it. You'll get a reply with your live app URL.
 
@@ -35,6 +37,7 @@ That's it. You'll get a reply with your live app URL.
 | 🐍 Snake Game | [e2e-test-snake-v2](https://metatransformer.github.io/singularity-builds/apps/e2e-test-snake-v2/) |
 | 🎨 Color Picker | [showcase-colorpicker](https://metatransformer.github.io/singularity-builds/apps/showcase-colorpicker/) |
 | 📝 Notepad | [showcase-notepad](https://metatransformer.github.io/singularity-builds/apps/showcase-notepad/) |
+| 🚀 Galaga Clone | [Bootz_of_Truth-galaga-like-game](https://metatransformer.github.io/singularity-builds/apps/Bootz_of_Truth-galaga-like-game-725435/) |
 
 All apps live at `https://metatransformer.github.io/singularity-builds/apps/{id}/`
 
@@ -59,6 +62,32 @@ All apps live at `https://metatransformer.github.io/singularity-builds/apps/{id}
 - **API Gateway** — REST endpoints for builds and data
 - **GitHub Pages** — zero-config static hosting
 
+## Self-Host
+
+Run your own Singularity Engine bot in minutes:
+
+```bash
+# Interactive setup — creates .env with your config
+npx singularity-engine init
+# or
+node bin/setup.mjs
+```
+
+You'll need:
+- An X/Twitter developer account with API credentials
+- An AWS account (for Lambda + DynamoDB)
+- A GitHub account (for deploying builds)
+- An Anthropic or OpenAI API key
+
+Then deploy:
+
+```bash
+./deploy-aws.sh    # Sets up AWS infrastructure
+node poller/poll-and-reply.mjs   # Start listening for tweets
+```
+
+See [full setup docs](docs/) for details.
+
 ## API
 
 ### Builds API
@@ -81,14 +110,6 @@ DELETE /api/data/:namespace/:key
 
 Apps use this automatically for persistent data (todos, scores, notes, etc).
 
-## Self-Host
-
-```bash
-npx singularity-engine init
-```
-
-Full self-host instructions and configuration coming soon.
-
 ## Beta Limitations
 
 - **10 builds per user per day** (free tier)
@@ -107,6 +128,6 @@ See [Terms of Service](docs/TOS.md) for full details.
 - [Architecture Roadmap](docs/ARCHITECTURE-ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
 
-## License
+## Built by [@metatransformr](https://x.com/metatransformr)
 
 MIT — You retain full rights to any apps you build.

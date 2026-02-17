@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Interactive setup for Singularity Engine
- * Prompts for config values, validates tokens, writes .env
+ * Simplified for self-hosters: bot identity, AI provider, AWS, GitHub
  */
 
 import { createInterface } from "readline";
@@ -14,7 +14,8 @@ const ask = (q, def) => new Promise(resolve => {
 });
 
 async function main() {
-  console.log("🦀 Singularity Engine Setup\n");
+  console.log("🔮 Singularity Engine Setup\n");
+  console.log("This will create a .env file with your configuration.\n");
 
   if (existsSync(".env")) {
     const overwrite = await ask("⚠️  .env already exists. Overwrite? (y/N)", "N");
@@ -26,45 +27,59 @@ async function main() {
 
   const config = {};
 
-  console.log("\n📱 X (Twitter) API");
-  config.X_BEARER_TOKEN = await ask("  Bearer token");
-  config.WATCHED_TWEET_ID = await ask("  Tweet ID to watch for replies");
-  config.OWNER_USERNAME = await ask("  Your X username (without @)");
+  // ── Bot Identity ──────────────────────────────────────────────
+  console.log("━━━ 🤖 Bot Identity ━━━");
+  config.OWNER_USERNAME = await ask("  Your bot's X/Twitter username (without @)");
 
-  console.log("\n☁️  AWS");
-  config.AWS_REGION = await ask("  Region", "us-east-1");
-  config.TABLE_NAME = await ask("  DynamoDB table name", "singularity-db");
+  console.log("\n  OAuth 1.0a credentials (get these from developer.x.com):");
+  config.X_CONSUMER_KEY = await ask("  Consumer Key (API Key)");
+  config.X_CONSUMER_SECRET = await ask("  Consumer Secret (API Secret)");
+  config.X_ACCESS_TOKEN = await ask("  Access Token");
+  config.X_ACCESS_TOKEN_SECRET = await ask("  Access Token Secret");
 
-  console.log("\n🐙 GitHub");
-  config.GITHUB_TOKEN = await ask("  Personal access token (repo scope)");
-  config.GITHUB_REPO = await ask("  Builds repo (org/name)", "your-org/singularity-builds");
-  config.GITHUB_PAGES_URL = await ask("  GitHub Pages URL", `https://${config.GITHUB_REPO.split("/")[0]}.github.io/${config.GITHUB_REPO.split("/")[1]}`);
+  // Bearer token derived or entered
+  config.X_BEARER_TOKEN = await ask("  Bearer Token (for reading tweets)");
 
-  console.log("\n🤖 Anthropic");
-  config.ANTHROPIC_API_KEY = await ask("  API key");
+  // Always x-api for self-hosters
+  config.REPLY_MODE = "x-api";
 
-  console.log("\n🗄️  SingularityDB");
-  config.SINGULARITY_DB_URL = await ask("  API Gateway URL (set after deploy-aws.sh)");
+  // ── AI Provider ───────────────────────────────────────────────
+  console.log("\n━━━ 🧠 AI Provider ━━━");
+  console.log("  Choose your AI provider for code generation:");
+  console.log("  1) Anthropic (default)");
+  console.log("  2) OpenAI");
+  const providerChoice = await ask("  Provider (1 or 2)", "1");
 
-  console.log("\n📤 Reply Mode");
-  console.log("  openclaw = browser automation (default, no API write access needed)");
-  console.log("  x-api    = X API v2 direct posting (fast, scalable)");
-  config.REPLY_MODE = await ask("  Reply mode", "openclaw");
-
-  if (config.REPLY_MODE === "x-api") {
-    console.log("\n🔑 X API OAuth 1.0a (get these from developer.x.com)");
-    config.X_CONSUMER_KEY = await ask("  Consumer Key (API Key)");
-    config.X_CONSUMER_SECRET = await ask("  Consumer Secret (API Secret)");
-    config.X_ACCESS_TOKEN = await ask("  Access Token");
-    config.X_ACCESS_TOKEN_SECRET = await ask("  Access Token Secret");
+  if (providerChoice === "2") {
+    config.AI_PROVIDER = "openai";
+    config.OPENAI_API_KEY = await ask("  OpenAI API key");
+  } else {
+    config.AI_PROVIDER = "anthropic";
+    config.ANTHROPIC_API_KEY = await ask("  Anthropic API key");
   }
 
-  console.log("\n🌐 OpenClaw (optional, used for openclaw reply mode)");
-  config.OPENCLAW_CDP_PORT = await ask("  CDP port", "18800");
+  // ── AWS ───────────────────────────────────────────────────────
+  console.log("\n━━━ ☁️  AWS ━━━");
+  console.log("  These will be configured automatically by deploy-aws.sh.");
+  config.AWS_REGION = await ask("  AWS region", "us-east-1");
+  config.TABLE_NAME = await ask("  DynamoDB table name", "singularity-db");
+
+  // ── GitHub ────────────────────────────────────────────────────
+  console.log("\n━━━ 🐙 GitHub ━━━");
+  config.GITHUB_TOKEN = await ask("  Personal access token (repo scope)");
+  config.GITHUB_REPO = await ask("  Builds repo (org/name)", `${config.OWNER_USERNAME}/singularity-builds`);
+  config.GITHUB_PAGES_URL = `https://${config.GITHUB_REPO.split("/")[0]}.github.io/${config.GITHUB_REPO.split("/")[1]}`;
+  console.log(`  GitHub Pages URL: ${config.GITHUB_PAGES_URL}`);
+
+  // Auto-configured values (set after deploy-aws.sh)
+  config.SINGULARITY_DB_URL = "";
+
+  // ── Validation ────────────────────────────────────────────────
+  console.log("\n━━━ 🔍 Validating ━━━");
 
   // Validate X API OAuth credentials
-  if (config.REPLY_MODE === "x-api" && config.X_CONSUMER_KEY) {
-    process.stdout.write("🔍 Validating X API OAuth credentials... ");
+  if (config.X_CONSUMER_KEY) {
+    process.stdout.write("  X API OAuth... ");
     try {
       const { validateCredentials } = await import("../shared/x-api-client.mjs");
       const result = await validateCredentials({
@@ -75,13 +90,13 @@ async function main() {
       });
       console.log(result.ok ? `✅ (@${result.username})` : `❌ (${result.error})`);
     } catch (e) {
-      console.log(`❌ (${e.message})`);
+      console.log(`⚠️  Could not validate (${e.message})`);
     }
   }
 
-  // Validate X token
+  // Validate X bearer token
   if (config.X_BEARER_TOKEN) {
-    process.stdout.write("\n🔍 Validating X API token... ");
+    process.stdout.write("  X Bearer Token... ");
     try {
       const res = await fetch("https://api.twitter.com/2/tweets/search/recent?query=test&max_results=10", {
         headers: { Authorization: `Bearer ${config.X_BEARER_TOKEN}` },
@@ -94,7 +109,7 @@ async function main() {
 
   // Validate GitHub token
   if (config.GITHUB_TOKEN) {
-    process.stdout.write("🔍 Validating GitHub token... ");
+    process.stdout.write("  GitHub token... ");
     try {
       const res = await fetch("https://api.github.com/user", {
         headers: { Authorization: `Bearer ${config.GITHUB_TOKEN}` },
@@ -110,8 +125,9 @@ async function main() {
     }
   }
 
-  // Write .env
+  // ── Write .env ────────────────────────────────────────────────
   const envContent = Object.entries(config)
+    .filter(([_, v]) => v) // skip empty values
     .map(([k, v]) => `${k}=${v}`)
     .join("\n") + "\n";
 
@@ -125,10 +141,9 @@ async function main() {
   }
 
   console.log("\n🎉 Setup complete! Next steps:");
-  console.log("  1. Run ./deploy-aws.sh (if you haven't)");
-  console.log("  2. Set Lambda env vars (script prints commands)");
-  console.log("  3. Start poller: node poller/poll-and-reply.mjs");
-  console.log("  4. Tweet a build request!");
+  console.log("  1. Run ./deploy-aws.sh (sets up AWS + updates .env with API URL)");
+  console.log("  2. Start poller: node poller/poll-and-reply.mjs");
+  console.log("  3. Tweet a build request at your bot!");
 
   rl.close();
 }
