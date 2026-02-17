@@ -1,65 +1,35 @@
-# Singularity Engine — Roadmap
+# Singularity Engine — 3-Month Roadmap
 
-## v0.1 Beta (Current — Experimental) 🧪
+> Living document. Updated 2026-02-16. Priorities may shift based on user feedback.
 
-**Tweet simple apps into existence.**
+## Month 1: Infrastructure & Monetization Foundation
 
-This is an early, experimental release. Expect bugs, rough edges, and rapid iteration. You're seeing the machine learn to walk.
+- [ ] **CloudFront CDN** for deployed apps (faster loads, custom domains later)
+- [ ] **S3 private source storage** — move source out of public GitHub Pages
+- [ ] **Per-app API keys** for DynamoDB namespace auth (prevent cross-app data access)
+- [ ] **Dashboard MVP** — view your builds, source code, build logs
+- [ ] **Pay-for-more-builds** system (Stripe integration, default 2 free/day)
+- [ ] **Improved error responses** — structured errors from all Lambdas, user-friendly build failure messages
 
-**What's in v0.1:**
-- Tweet `SingularityEngine build me a <thing>` → AI builds a live web app in ~45 seconds
-- Single-page HTML/CSS/JS apps (no frameworks, no external deps)
-- Persistent data via SingularityDB (DynamoDB-backed key-value store per app)
-- No auth required — open to anyone on X
-- Deployed to GitHub Pages via @metatransformr's account
-- Server costs fronted by [@metatransformr](https://x.com/metatransformr)
-- Rate limited: 2 builds per user per day
-- Security: prompt injection detection, code scanning, CSP injection
-- Self-hostable — clone the repo and deploy your own in minutes
+## Month 2: Developer Experience & Scale
 
-**Known limitations:**
-- Single-file apps only (no multi-file projects yet)
-- No user accounts or auth
-- Apps may be buggy (AI-generated, not human-reviewed)
-- No edit/delete — builds are permanent once deployed
-- Rate limits are per-user, not per-app
+- [ ] **Multi-user auth per app** — session-based authentication (not RLS), let apps have their own users
+- [ ] **Per-app API deployments** — each app gets its own API endpoint, not just static files
+- [ ] **Environment variables** for private projects (secrets, API keys)
+- [ ] **Source code minification** option (opt-in)
+- [ ] **DynamoDB limitations analysis** — evaluate migration path to DocumentDB or MongoDB Atlas
+- [ ] **Multiple programming languages** — Python, Go beyond just HTML/JS/CSS
 
-**Get help:** [Discord](https://discord.gg/clawd) · [GitHub Issues](https://github.com/Metatransformer/singularity-engine/issues)
+## Month 3: Platform & Distribution
 
----
-
-## Post-Launch (v0.2) — Early Roadmap 🛠️
-
-- **Build from website** — Trigger builds directly from singularityengine.ai (no Twitter needed)
-- **Live iframe previews** — See apps running inside the gallery, not just links
-- **Social share cards** — OG meta tags per build with auto-generated preview images
-- **Showcase page** — Browse all builds with filtering, search, and infinite scroll
-- **Error recovery** — Auto-retry failed builds with simplified prompts
-- **Build status polling** — Real-time progress tracking for in-flight builds
+- [ ] **Multi-channel input** — build apps from Telegram, Discord, OpenClaw skills, Mesh
+- [ ] **Kubernetes / off-AWS portability** — Helm chart, run Singularity Engine anywhere
+- [ ] **Paid private projects** — source code hidden, private hosting
+- [ ] **Multi-shot iterative builds** — reply to refine, iterate on your app in conversation
+- [ ] **Full dashboard with analytics** — traffic, usage stats, build history, cost tracking
 
 ---
 
-## Next (v0.3) — Accounts & Integrations 🔐
+## How to Influence This Roadmap
 
-- **Auth & accounts** — Sign in with X, manage your builds
-- **Dashboard** — Edit, delete, rename, set custom slugs
-- **OpenClaw / agent integration** — Let AI agents trigger builds programmatically
-- **Multi-model** — Choose Claude, GPT, or Gemini as the builder
-- **Plugin system** — Extend SingularityDB with image upload, real-time sync, auth
-
----
-
-## Ideation (Considering) 💡
-
-These are ideas we're exploring. No commitments — join the conversation to shape what gets built.
-
-- **Platform** — Marketplace for community-built templates, collaborative builds, analytics
-- **Monetization** — Pro tier, sponsored builds, white-label, build-to-deploy upgrades
-- **The Mesh** — Decentralized agent coordination layer (may ship alongside or under the metatransformer umbrella)
-- **Multi-file apps** — Generate full projects (HTML + CSS + JS), not just single files
-- **App forking / remixing** — "Remix this" button to iterate on any existing build
-- **Build threads** — Reply to a build with "now add dark mode" → updates the same app
-- **Custom domains** — Point your own domain at a build
-- **Discord / Slack integration** — Same pipeline, different surfaces
-
-**Have an idea?** [Open a GitHub issue](https://github.com/Metatransformer/singularity-engine/issues) or [join our Discord](https://discord.gg/clawd).
+Tweet [@metatransformr](https://x.com/metatransformr) or open an issue. The loudest feedback wins.
