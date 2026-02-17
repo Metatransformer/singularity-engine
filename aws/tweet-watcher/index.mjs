@@ -87,24 +87,9 @@ function buildTriggerRegex(keyword) {
 const TRIGGER_RE = buildTriggerRegex(TRIGGER_KEYWORD);
 
 function extractBuildRequest(text, tweetMeta) {
-  // Try standard keyword match first
-  const match = text.match(TRIGGER_RE);
-  if (match) return match[1].replace(/^(build\s+me\s+|make\s+me\s+|create\s+|build\s+)/i, "").trim();
-
-  // Fallback: X converts singularityengine.ai to a t.co URL.
-  // Look for "build me" after any URL or @mention in watched threads.
-  const buildMeMatch = text.match(/(?:https?:\/\/t\.co\/\S+|@\w+)\s+build\s+me\s+(.+)/i);
-  if (buildMeMatch) return buildMeMatch[1].trim();
-
-  // Last fallback: just "build me <something>" anywhere in a watched thread reply
-  const simpleBuildMe = text.match(/build\s+me\s+(?:a\s+)?(.+)/i);
-  if (simpleBuildMe && tweetMeta?.conversationId) {
-    const watchedIds = (WATCHED_TWEET_ID || "").split(",").map(s => s.trim());
-    if (watchedIds.includes(tweetMeta.conversationId)) {
-      return simpleBuildMe[1].trim();
-    }
-  }
-
+  // Simple: extract everything after "build" (handles "build me a...", "build a...", "build XYZ")
+  const buildMatch = text.match(/\bbuild\s+(?:me\s+)?(?:a\s+)?(.+)/i);
+  if (buildMatch) return buildMatch[1].trim();
   return null;
 }
 
@@ -121,16 +106,12 @@ async function fetchReplies(sinceId) {
   // Support multiple watched threads (comma-separated)
   const watchedIds = (WATCHED_TWEET_ID || "").split(",").map(s => s.trim()).filter(Boolean);
   for (const threadId of watchedIds) {
-    // Search with keyword (catches literal text mentions)
-    queries.push(`conversation_id:${threadId} "${searchKeyword}" -is:retweet`);
-    // Also search for "build me" in watched threads (catches URL-form keyword like t.co links)
-    queries.push(`conversation_id:${threadId} "build me" -is:retweet`);
+    // Search for "build" in watched threads
+    queries.push(`conversation_id:${threadId} "build" -is:retweet`);
   }
 
-  // Direct @mentions with the keyword
-  queries.push(`@${OWNER_USERNAME} "${searchKeyword}" -is:retweet`);
-  // Also catch @mentions with "build me" (URL-form keyword)
-  queries.push(`@${OWNER_USERNAME} "build me" -is:retweet`);
+  // Direct @mentions with "build"
+  queries.push(`@${OWNER_USERNAME} "build" -is:retweet`);
 
   const allTweets = [];
   const seenIds = new Set();

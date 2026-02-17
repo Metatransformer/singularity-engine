@@ -87,7 +87,7 @@ async function pushToGitHub(appId, html) {
 }
 
 async function queueReply(tweetId, username, appUrl, request) {
-  const replyText = `@${username} Done! ✨\n\n${appUrl}\n\nBuilt by SingularityEngine 🦀\nhttps://github.com/Metatransformer/singularity-engine`;
+  const replyText = `@${username} Done! ✨\n\n${appUrl}\n\nmade by singularityengine by @metatransformr`;
 
   // Try posting directly via X API if configured
   if (REPLY_MODE === "x-api" && X_CONSUMER_KEY && X_ACCESS_TOKEN) {
