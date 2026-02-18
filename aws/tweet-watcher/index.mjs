@@ -94,7 +94,9 @@ function buildTriggerRegex(keyword) {
 const TRIGGER_RE = buildTriggerRegex(TRIGGER_KEYWORD);
 
 // Valid trigger keywords — must appear IMMEDIATELY after @metatransformr
-const VALID_KEYWORDS = ["build", "create", "make", "generate", "deploy"];
+const BUILD_KEYWORDS = ["build", "create", "make", "generate", "deploy"];
+const REFINE_KEYWORDS = ["refine", "update", "change", "modify", "improve", "fix"];
+const VALID_KEYWORDS = [...BUILD_KEYWORDS, ...REFINE_KEYWORDS];
 const KEYWORD_PATTERN = VALID_KEYWORDS.join("|");
 
 function extractBuildRequest(text, tweetMeta) {
@@ -104,19 +106,25 @@ function extractBuildRequest(text, tweetMeta) {
   for (const botName of allBotUsernames) {
     // STRICT FORMAT: @botname <keyword> [me] [a/an] <request>
     const strictRe = new RegExp(
-      `@${botName}\\s+(?:${KEYWORD_PATTERN})\\s+(?:me\\s+)?(?:an?\\s+)?(.+)`,
+      `@${botName}\\s+(${KEYWORD_PATTERN})\\s+(?:me\\s+)?(?:an?\\s+)?(.+)`,
       "i"
     );
     const strictMatch = text.match(strictRe);
-    if (strictMatch) return strictMatch[1].trim();
+    if (strictMatch) {
+      const keyword = strictMatch[1].toLowerCase();
+      return { cleaned: strictMatch[2].trim(), isRefine: REFINE_KEYWORDS.includes(keyword) };
+    }
 
     // Also accept: <keyword> @botname <request> (alternate word order)
     const altRe = new RegExp(
-      `(?:${KEYWORD_PATTERN})\\s+@${botName}\\s+(?:me\\s+)?(?:an?\\s+)?(.+)`,
+      `(${KEYWORD_PATTERN})\\s+@${botName}\\s+(?:me\\s+)?(?:an?\\s+)?(.+)`,
       "i"
     );
     const altMatch = text.match(altRe);
-    if (altMatch) return altMatch[1].trim();
+    if (altMatch) {
+      const keyword = altMatch[1].toLowerCase();
+      return { cleaned: altMatch[2].trim(), isRefine: REFINE_KEYWORDS.includes(keyword) };
+    }
   }
 
   return null;
@@ -320,11 +328,12 @@ export async function handler() {
       console.log(`⏭️ No valid "@${OWNER_USERNAME} <keyword> <request>" format from @${reply.username}: "${reply.text.slice(0, 80)}"`);
       continue;
     }
+    const { cleaned: rawRequest, isRefine } = buildRequest;
 
     // Sanitize (uses vard + custom patterns)
-    const check = sanitizeBuildRequest(buildRequest);
+    const check = sanitizeBuildRequest(rawRequest);
     if (!check.safe) {
-      console.log(`❌ Rejected @${reply.username}: ${check.reason} — "${buildRequest.slice(0, 50)}"`);
+      console.log(`❌ Rejected @${reply.username}: ${check.reason} — "${rawRequest.slice(0, 50)}"`);
       
       // Queue a rejection reply so the user knows why
       const rejectionText = getRejectionReply(reply.username, check.category);
@@ -348,7 +357,7 @@ export async function handler() {
         Item: {
           ns: "_rejected",
           key: `${reply.id}`,
-          value: { username: reply.username, request: buildRequest.slice(0, 200), reason: check.reason, category: check.category },
+          value: { username: reply.username, request: rawRequest.slice(0, 200), reason: check.reason, category: check.category },
           updatedAt: new Date().toISOString(),
         },
       }));
@@ -386,7 +395,6 @@ export async function handler() {
     let existingCode = null;
     let iterationAppId = null;
     if (reply.inReplyToTweetId) {
-      // Check if the parent tweet is a build result (bot reply with URL)
       const previousBuild = await getBuildByReplyTweetId(reply.inReplyToTweetId);
       if (previousBuild?.appId) {
         console.log(`🔄 Iteration detected: modifying ${previousBuild.appId}`);
@@ -395,6 +403,23 @@ export async function handler() {
           iterationAppId = previousBuild.appId;
         }
       }
+    }
+
+    // If user used "refine/update/fix/etc" but there's no parent build to iterate on, reject
+    if (isRefine && !iterationAppId) {
+      console.log(`⏭️ @${reply.username} used refine keyword but no parent build found — skipping`);
+      await ddb.send(new PutCommand({
+        TableName: TABLE,
+        Item: {
+          ns: "_reply_queue",
+          key: `refine-no-parent-${reply.id}`,
+          value: {
+            tweetId: reply.id,
+            text: `@${reply.username} 🔄 I can't find a build to refine! To iterate, reply directly to one of my build tweets using "refine" + your changes. To start fresh, use "build" instead.`,
+          },
+        },
+      }));
+      continue;
     }
 
     const appId = iterationAppId || `${reply.username}-${slugify(check.cleaned).slice(0, 25)}-${reply.id.slice(-6)}`;
