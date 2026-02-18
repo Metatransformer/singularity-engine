@@ -86,7 +86,7 @@ async function pushToGitHub(appId, html) {
   return `${GITHUB_PAGES_URL}/apps/${appId}/`;
 }
 
-async function queueReply(tweetId, username, appUrl, request) {
+async function queueReply(tweetId, username, appUrl, request, appId) {
   const replyText = `@${username} Done! ✨\n\n${appUrl}\n\nbuilt by @singularityengn powered by @metatransformr (diy)`;
 
   // Try posting directly via X API if configured
@@ -100,7 +100,7 @@ async function queueReply(tweetId, username, appUrl, request) {
       });
       if (result.ok) {
         console.log(`✅ Reply posted via X API: ${result.tweetId}`);
-        // Still log to reply queue as "done"
+        // Log to reply queue as "done"
         await ddb.send(new PutCommand({
           TableName: TABLE,
           Item: {
@@ -109,6 +109,16 @@ async function queueReply(tweetId, username, appUrl, request) {
             value: { tweetId, username, appUrl, request, replyText, replyTweetId: result.tweetId },
             updatedAt: new Date().toISOString(),
             status: "done",
+          },
+        }));
+        // Write _build_replies mapping so tweet-watcher can look up iterations
+        await ddb.send(new PutCommand({
+          TableName: TABLE,
+          Item: {
+            ns: "_build_replies",
+            key: result.tweetId,
+            value: { appId, tweetId, username, request, appUrl },
+            updatedAt: new Date().toISOString(),
           },
         }));
         return;
@@ -146,7 +156,7 @@ export async function handler(event) {
     console.log(`✅ Deployed: ${appUrl}`);
 
     // Queue reply
-    await queueReply(tweetId, username, appUrl, request);
+    await queueReply(tweetId, username, appUrl, request, appId);
     console.log(`📬 Reply queued for @${username}`);
 
     // Log the build

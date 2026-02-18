@@ -86,6 +86,21 @@ async function replyViaXApi(item) {
   const result = await xApiPostReply(tweetId, replyText, creds);
   if (result.ok) {
     console.log(`  ✅ Reply posted: ${result.tweetId}`);
+    // Write _build_replies mapping for iteration lookup
+    try {
+      const { appUrl, username: un, request: req } = item;
+      const appId = appUrl ? appUrl.split("/apps/")[1]?.replace(/\/$/, "") : null;
+      if (appId && result.tweetId) {
+        await fetch(`${API}/_build_replies/${result.tweetId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: { appId, tweetId, username: un, request: req, appUrl } }),
+        });
+        console.log(`  📝 _build_replies written for ${result.tweetId}`);
+      }
+    } catch (err) {
+      console.error(`  ⚠️ Failed to write _build_replies: ${err.message}`);
+    }
     return true;
   } else {
     console.error(`  ❌ X API error: ${result.error}`);
