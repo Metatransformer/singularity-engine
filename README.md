@@ -29,6 +29,22 @@ You can also tweet [@metatransformr](https://x.com/metatransformr) (the creator)
 
 That's it. You'll get a reply with your live app URL.
 
+## Refine & Iterate
+
+Got a build but want changes? **Reply directly to the bot's build tweet** using a refine keyword:
+
+> @SingularityEngn refine make the background dark mode
+
+> @SingularityEngn update add a leaderboard
+
+> @SingularityEngn fix the button is too small
+
+**Refine keywords:** `refine`, `update`, `change`, `modify`, `improve`, `fix`
+
+The engine will fetch your existing app's source code and modify it — same URL, improved app. You can iterate as many times as you want.
+
+**Important:** You must reply to the bot's tweet (the one with your app URL). Using refine keywords on a standalone tweet won't work — the engine needs to know which build to modify.
+
 ## Example Builds
 
 | App | Link |
