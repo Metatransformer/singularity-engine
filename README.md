@@ -116,10 +116,33 @@ Apps use this automatically for persistent data (todos, scores, notes, etc).
 - All source code is **public** (deployed to GitHub Pages)
 - Databases may be **wiped** during beta
 - No auth/security guarantees yet
-- Single-shot builds only (iterative refinement coming)
 - HTML/JS/CSS only (more languages coming)
 
 See [Terms of Service](docs/TOS.md) for full details.
+
+## Multi-Model Support
+
+Singularity Engine supports multiple AI models for code generation:
+
+| Model | Env Var | Provider |
+|-------|---------|----------|
+| `claude` (default) | `ANTHROPIC_API_KEY` | Anthropic Claude Sonnet |
+| `grok` | `GROK_API_KEY` | xAI Grok-3 |
+| `gpt` | `OPENAI_API_KEY` | OpenAI GPT-4o |
+
+Set the `MODEL` env var on the code runner Lambda to change the default, or pass `model` in the build request payload.
+
+## Build Iteration
+
+Reply to a build result tweet to iterate on your app! Instead of starting from scratch, Singularity Engine will fetch your existing code and apply the requested changes.
+
+```
+You: @SingularityEngn build me a todo app
+Bot: Done! ✨ https://...
+
+You (replying to bot): @SingularityEngn make it dark mode with animations
+Bot: Done! ✨ https://... (same app, updated)
+```
 
 ## Documentation
 

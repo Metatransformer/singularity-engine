@@ -5,58 +5,85 @@
  * Input: BUILD_REQUEST env var (sanitized tweet text)
  * Output: writes HTML to /output/index.html
  * 
- * Can also run as Lambda handler (for simpler deployment).
+ * Supports multiple models via MODEL env var (claude|grok|gpt).
+ * Supports build iteration via EXISTING_CODE env var or existingCode param.
  * Build engine is configurable via BUILD_ENGINE env var.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { writeFileSync, mkdirSync } from "fs";
 import { CODE_RUNNER_SYSTEM_PROMPT, buildUserPrompt, buildSingularityDBScript, SINGULARITY_DB_URL } from "./shared/prompts.mjs";
 import { scanGeneratedCode } from "./shared/security.mjs";
+import { generateWithModel } from "./shared/model-adapters.mjs";
 
-// Build tool is configurable — never hardcode tool names in output
 const BUILD_ENGINE = process.env.BUILD_ENGINE || "default";
+const DEFAULT_MODEL = process.env.MODEL || "claude";
 
-// Auth: SDK natively supports authToken (Bearer) and apiKey (x-api-key)
-// Set ANTHROPIC_AUTH_TOKEN for OAuth session tokens (prioritized by SDK when both present)
-// Set ANTHROPIC_API_KEY for standard API keys
-// The SDK reads both from env vars automatically — no config needed here
-const client = new Anthropic();
+// Iteration system prompt — used when modifying existing code
+const ITERATION_SYSTEM_PROMPT = `You are a code iteration engine. You receive existing HTML application code and a modification request.
 
-async function generateApp(request, appId) {
-  console.log(`🔨 Building: "${request}" (namespace: ${appId})`);
+Your job:
+1. Read the existing code carefully
+2. Apply the requested changes
+3. Return the COMPLETE updated HTML file (not a diff)
+4. Preserve all existing functionality unless explicitly asked to remove it
+5. Keep the same structure, style, and patterns as the original
+6. Do NOT add explanations — return ONLY the complete HTML document
 
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 16000,
-    system: CODE_RUNNER_SYSTEM_PROMPT,
-    messages: [
-      { role: "user", content: buildUserPrompt(request, appId) },
-    ],
-  });
+Rules:
+- Output a single, complete HTML file
+- Maintain all existing features unless the user asks to change them
+- Keep the SingularityDB integration intact if present
+- Preserve CSP meta tags and injected scripts`;
 
-  const html = message.content[0]?.text;
+function buildIterationPrompt(existingCode, request, appId) {
+  return `Here is the existing app code:
 
-  if (!html || (!html.includes("<!DOCTYPE html>") && !html.includes("<html"))) {
-    throw new Error("Claude did not generate valid HTML");
+\`\`\`html
+${existingCode}
+\`\`\`
+
+The user wants these changes: ${request}
+
+Modify the code accordingly. Return the complete updated HTML file. Do not include any explanation — just the HTML.`;
+}
+
+async function generateApp(request, appId, options = {}) {
+  const model = options.model || DEFAULT_MODEL;
+  const existingCode = options.existingCode || process.env.EXISTING_CODE;
+  const isIteration = !!existingCode;
+
+  if (isIteration) {
+    console.log(`🔄 Iteration mode: modifying existing app (${existingCode.length} bytes) with model=${model}`);
+  } else {
+    console.log(`🔨 Building: "${request}" (namespace: ${appId}, model: ${model})`);
   }
 
-  // Extract just the HTML (in case Claude added explanation)
+  const systemPrompt = isIteration ? ITERATION_SYSTEM_PROMPT : CODE_RUNNER_SYSTEM_PROMPT;
+  const userPrompt = isIteration 
+    ? buildIterationPrompt(existingCode, request, appId)
+    : buildUserPrompt(request, appId);
+
+  const html = await generateWithModel(model, systemPrompt, userPrompt, 16000);
+
+  if (!html || (!html.includes("<!DOCTYPE html>") && !html.includes("<html"))) {
+    throw new Error(`${model} did not generate valid HTML`);
+  }
+
+  // Extract just the HTML (in case model added explanation)
   const htmlMatch = html.match(/(<!DOCTYPE html>[\s\S]*<\/html>)/i) || 
                     html.match(/(<html[\s\S]*<\/html>)/i);
   
   let cleanHtml = htmlMatch ? htmlMatch[1] : html;
 
   // Inject Content-Security-Policy meta tag to restrict runtime behavior
-  // Only allow fetch to our API Gateway, block all other external connections
   const dbUrl = process.env.SINGULARITY_DB_URL || SINGULARITY_DB_URL;
   const dbOrigin = dbUrl ? new URL(dbUrl).origin : "https://*.execute-api.*.amazonaws.com";
   const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src ${dbOrigin}; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">`;
 
-  // Build the SingularityDB client script with the correct API URL and namespace
+  // Build the SingularityDB client script
   const dbScript = buildSingularityDBScript(dbUrl, appId);
 
-  // Strip any SingularityDB class Claude may have generated (we inject the real one)
+  // Strip any SingularityDB class the model may have generated
   cleanHtml = cleanHtml.replace(/class\s+SingularityDB\s*\{[\s\S]*?\n\s*\}/g, '/* SingularityDB class removed — using injected version */');
 
   // Insert CSP + SingularityDB script after <head> tag
@@ -70,10 +97,9 @@ async function generateApp(request, appId) {
   const scan = scanGeneratedCode(cleanHtml);
   if (!scan.safe) {
     console.warn(`⚠️ Security violations detected:`, scan.violations);
-    // Allow expected patterns from SingularityDB usage, block everything else
     const allowedViolations = [
-      "fetch() call — needs allowlist check",  // SingularityDB uses fetch
-      "innerHTML assignment (XSS risk)",         // Common in UI code (low risk for static HTML)
+      "fetch() call — needs allowlist check",
+      "innerHTML assignment (XSS risk)",
     ];
     const critical = scan.violations.filter(v => !allowedViolations.includes(v));
     if (critical.length > 0) {
@@ -87,11 +113,11 @@ async function generateApp(request, appId) {
 // Lambda handler
 export async function handler(event) {
   try {
-    const { request, appId, tweetId, userId } = typeof event.body === "string" 
+    const { request, appId, tweetId, userId, model, existingCode } = typeof event.body === "string" 
       ? JSON.parse(event.body) 
       : event;
 
-    const html = await generateApp(request, appId);
+    const html = await generateApp(request, appId, { model, existingCode });
 
     return {
       statusCode: 200,
@@ -101,6 +127,8 @@ export async function handler(event) {
         appId, 
         tweetId, 
         userId,
+        model: model || DEFAULT_MODEL,
+        isIteration: !!existingCode,
         bytesGenerated: html.length,
       }),
     };

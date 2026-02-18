@@ -12,6 +12,8 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const lambda = new LambdaClient({});
 
 const TABLE = process.env.TABLE_NAME || "singularity-db";
+const GITHUB_REPO = process.env.GITHUB_REPO || "Metatransformer/singularity-builds";
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const CODE_RUNNER_FN = process.env.CODE_RUNNER_FUNCTION || "singularity-code-runner";
 const DEPLOYER_FN = process.env.DEPLOYER_FUNCTION || "singularity-deployer";
 const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
@@ -152,8 +154,8 @@ async function fetchReplies(sinceId) {
     const params = new URLSearchParams({
       query,
       max_results: "20",
-      "tweet.fields": "author_id,created_at,in_reply_to_user_id,conversation_id",
-      "expansions": "author_id",
+      "tweet.fields": "author_id,created_at,in_reply_to_user_id,conversation_id,referenced_tweets",
+      "expansions": "author_id,referenced_tweets.id",
       "user.fields": "username",
     });
     if (sinceId !== "0") params.set("since_id", sinceId);
@@ -180,6 +182,8 @@ async function fetchReplies(sinceId) {
     for (const tweet of data.data) {
       if (seenIds.has(tweet.id)) continue;
       seenIds.add(tweet.id);
+      // Find the tweet this is replying to (if any)
+      const repliedTo = tweet.referenced_tweets?.find(r => r.type === "replied_to");
       allTweets.push({
         id: tweet.id,
         text: tweet.text,
@@ -187,6 +191,7 @@ async function fetchReplies(sinceId) {
         username: users[tweet.author_id] || "unknown",
         createdAt: tweet.created_at,
         conversationId: tweet.conversation_id,
+        inReplyToTweetId: repliedTo?.id || null,
       });
     }
   }
@@ -207,6 +212,53 @@ async function invokeLambda(functionName, payload) {
   const response = JSON.parse(new TextDecoder().decode(result.Payload));
   if (response.body) return JSON.parse(response.body);
   return response;
+}
+
+// --- Build Iteration Support ---
+
+/**
+ * Check if a tweet ID corresponds to a previous build result.
+ * Returns the build record if found, null otherwise.
+ */
+async function getBuildByTweetId(tweetId) {
+  if (!tweetId) return null;
+  const result = await ddb.send(new GetCommand({
+    TableName: TABLE,
+    Key: { ns: "_builds", key: tweetId },
+  }));
+  return result.Item?.value || null;
+}
+
+/**
+ * Look up a build by the bot's reply tweet ID.
+ * When the bot replies with a build URL, we store the reply tweet ID → build mapping.
+ */
+async function getBuildByReplyTweetId(replyTweetId) {
+  if (!replyTweetId) return null;
+  const result = await ddb.send(new GetCommand({
+    TableName: TABLE,
+    Key: { ns: "_build_replies", key: replyTweetId },
+  }));
+  return result.Item?.value || null;
+}
+
+/**
+ * Fetch existing HTML source from GitHub Pages repo for iteration.
+ */
+async function fetchExistingCode(appId) {
+  if (!GITHUB_TOKEN) return null;
+  const path = `apps/${appId}/index.html`;
+  const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${GITHUB_TOKEN}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Buffer.from(data.content, "base64").toString("utf-8");
+  } catch {
+    return null;
+  }
 }
 
 // --- Main handler ---
@@ -330,8 +382,24 @@ export async function handler() {
       continue;
     }
 
-    const appId = `${reply.username}-${slugify(check.cleaned).slice(0, 25)}-${reply.id.slice(-6)}`;
-    console.log(`🔨 Building for @${reply.username}: "${check.cleaned}" (${appId})`);
+    // --- Check for iteration (reply to a previous build) ---
+    let existingCode = null;
+    let iterationAppId = null;
+    if (reply.inReplyToTweetId) {
+      // Check if the parent tweet is a build result (bot reply with URL)
+      const previousBuild = await getBuildByReplyTweetId(reply.inReplyToTweetId);
+      if (previousBuild?.appId) {
+        console.log(`🔄 Iteration detected: modifying ${previousBuild.appId}`);
+        existingCode = await fetchExistingCode(previousBuild.appId);
+        if (existingCode) {
+          iterationAppId = previousBuild.appId;
+        }
+      }
+    }
+
+    const appId = iterationAppId || `${reply.username}-${slugify(check.cleaned).slice(0, 25)}-${reply.id.slice(-6)}`;
+    const isIteration = !!existingCode;
+    console.log(`🔨 ${isIteration ? "Iterating" : "Building"} for @${reply.username}: "${check.cleaned}" (${appId})`);
 
     try {
       const buildResult = await invokeLambda(CODE_RUNNER_FN, {
@@ -339,6 +407,7 @@ export async function handler() {
         appId,
         tweetId: reply.id,
         userId: reply.username,
+        existingCode: existingCode || undefined,
       });
 
       if (!buildResult.ok) {
