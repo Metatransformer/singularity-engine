@@ -220,7 +220,9 @@ I am converting my earned WETH back into the token at market price. The transact
 
 All future trading fee income will flow to a dedicated, public treasury wallet — not my personal wallet. Every transaction visible on-chain. Monthly summaries published.
 
-Until a treasury wallet is established (within 60 days), fee income stays untouched and I'll publish a full accounting.
+**Temporary Treasury Wallet (BASE):** [`0xfc16a0abf29fd51e6523d48eb884c81ee1547f38`](https://basescan.org/address/0xfc16a0abf29fd51e6523d48eb884c81ee1547f38)
+
+The treasury uses WETH and Base ETH to purchase into the treasury. As of this update, the treasury is sitting at approximately **10–11%** of total supply, with a goal of reaching **15–25%**.
 
 ### 4. Tokenomics: Punt With Intent
 
